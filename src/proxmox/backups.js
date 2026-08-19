@@ -82,22 +82,22 @@ export function successStatusTypes(successScope) {
 /**
  * Read a page of backup tasks of one node, asking the server to filter by task
  * type when it can, and falling back to a wider page otherwise.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {string} node - Node name.
  * @returns {Promise<unknown>} The raw `data` member of the answer.
  */
-async function fetchTaskPage(config, node) {
+async function fetchTaskPage(server, node) {
   const path = `/nodes/${encodeURIComponent(node)}/tasks`;
-  const fallback = () => get(config, path, { limit: MAX_TASKS_FETCHED_UNFILTERED, start: 0 });
+  const fallback = () => get(server, path, { limit: MAX_TASKS_FETCHED_UNFILTERED, start: 0 });
   // Keyed by host too: two Proxmox installations can hold nodes of the same
   // name on different generations.
-  const key = `${config.host}:${config.port}/${node}`;
+  const key = `${server.host}:${server.port}/${node}`;
 
   if (noTypeFilter.has(key)) {
     return fallback();
   }
   try {
-    return await get(config, path, {
+    return await get(server, path, {
       typefilter: BACKUP_TASK_TYPE,
       limit: MAX_TASKS_FETCHED,
       start: 0,
@@ -116,18 +116,18 @@ async function fetchTaskPage(config, node) {
 
 /**
  * Read the backup tasks of one node, inside the configured window.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {string} node - Node name.
  * @returns {Promise<object[]>} The backups, most recent first.
  */
-export async function fetchBackupTasks(config, node) {
-  const data = await fetchTaskPage(config, node);
+export async function fetchBackupTasks(server, node) {
+  const data = await fetchTaskPage(server, node);
   if (!Array.isArray(data)) {
     throw new ProxmoxError('parse', `Proxmox returned an unexpected task list for node ${node}.`);
   }
 
-  const since = Math.floor(Date.now() / 1000) - config.backup_lookback_days * 86400;
-  const success = successStatusTypes(config.backup_success_scope);
+  const since = Math.floor(Date.now() / 1000) - server.backup_lookback_days * 86400;
+  const success = successStatusTypes(server.backup_success_scope);
 
   const backups = data
     .filter((task) => String(task?.type ?? '').toLowerCase() === BACKUP_TASK_TYPE)
@@ -156,7 +156,7 @@ export async function fetchBackupTasks(config, node) {
     .sort((a, b) => b.starttime - a.starttime);
 
   logger.debug(
-    `Node ${node}: ${backups.length} backup(s) in the last ${config.backup_lookback_days} day(s)`,
+    `Node ${node}: ${backups.length} backup(s) in the last ${server.backup_lookback_days} day(s)`,
   );
 
   if (backups.length === 0 && data.length >= MAX_TASKS_FETCHED) {
@@ -173,11 +173,11 @@ export async function fetchBackupTasks(config, node) {
 
 /**
  * The last backup of one node, or null when the window holds none.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {string} node - Node name.
  * @returns {Promise<object|null>} The most recent backup task, or null.
  */
-export async function fetchLastBackup(config, node) {
-  const backups = await fetchBackupTasks(config, node);
+export async function fetchLastBackup(server, node) {
+  const backups = await fetchBackupTasks(server, node);
   return backups.length > 0 ? backups[0] : null;
 }

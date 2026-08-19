@@ -4,14 +4,16 @@
 // Unlike the static registry of the official template, the device list here is
 // DISCOVERED: one Gladys device per Proxmox node, plus one per QEMU virtual
 // machine and LXC container, and none of them is known before `GET /nodes` and
-// `GET /cluster/resources` have answered. This module owns that list and the
-// mapping back from a Gladys `external_id` to what it stands for, which is what
-// routes `onPoll` to the right reader.
+// `GET /cluster/resources` have answered — on EACH configured server. This
+// module owns that list and the mapping back from a Gladys `external_id` to
+// what it stands for (which server, and what on it), which is what routes
+// `onPoll` to the right reader.
 // -----------------------------------------------------------------------------
 
 import { createLogger } from '@gladysassistant/integration-sdk';
 import { listNodes } from '../proxmox/nodes.js';
 import { clearGuestsCache, fetchGuests, parseGuestKey } from '../proxmox/guests.js';
+import { listServers, parseScopedId, serverById } from '../servers.js';
 import {
   buildNodeDevice,
   DEVICE_TYPE as NODE_DEVICE_TYPE,
@@ -27,8 +29,8 @@ import {
 
 const logger = createLogger({ name: 'devices' });
 
-// external_id -> { kind: 'node' | 'guest', node? , key? }, refreshed on every
-// discovery.
+// external_id -> { kind: 'node' | 'guest', serverId, node? , key? }, refreshed
+// on every discovery.
 const knownDevices = new Map();
 
 /**
@@ -44,7 +46,8 @@ function prefixOf(gladys, type) {
 }
 
 /**
- * Recover what a Gladys device stands for: a Proxmox node, or a guest.
+ * Recover what a Gladys device stands for: a Proxmox node, or a guest, on one
+ * of the configured servers.
  * @param {object} gladys - The SDK instance.
  * @param {object} device - The device Gladys sent.
  * @returns {object|null} The descriptor, or null when the id is not ours.
@@ -61,71 +64,112 @@ export function describeDevice(gladys, device) {
 
   const nodePrefix = prefixOf(gladys, NODE_DEVICE_TYPE);
   if (externalId.startsWith(nodePrefix)) {
-    const node = externalId.slice(nodePrefix.length);
-    return node.length > 0 ? { kind: 'node', node } : null;
+    const { serverId, localId } = parseScopedId(externalId.slice(nodePrefix.length));
+    return localId.length > 0 ? { kind: 'node', serverId, node: localId } : null;
   }
 
   const guestPrefix = prefixOf(gladys, GUEST_DEVICE_TYPE);
   if (externalId.startsWith(guestPrefix)) {
-    const parsed = parseGuestKey(externalId.slice(guestPrefix.length));
-    return parsed ? { kind: 'guest', key: `${parsed.kind}-${parsed.vmid}` } : null;
+    const { serverId, localId } = parseScopedId(externalId.slice(guestPrefix.length));
+    const parsed = parseGuestKey(localId);
+    return parsed ? { kind: 'guest', serverId, key: `${parsed.kind}-${parsed.vmid}` } : null;
   }
 
   return null;
 }
 
 /**
- * Discover the monitored Proxmox nodes and guests, and build their discovery
- * payloads.
+ * Discover the nodes and guests of ONE server, and build their payloads.
  * @param {object} gladys - The SDK instance.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @returns {Promise<object[]>} One device per node, then one per guest.
  */
-export async function buildDiscoveredDevices(gladys, config) {
-  const nodes = await listNodes(config);
+async function discoverServer(gladys, server) {
+  const nodes = await listNodes(server);
   // A discovery must never answer from a snapshot taken minutes ago.
-  const guests = await fetchGuests(config, { force: true });
+  const guests = await fetchGuests(server, { force: true });
 
-  knownDevices.clear();
   for (const { node } of nodes) {
-    knownDevices.set(nodeExternalIds(gladys, node).device, { kind: 'node', node });
+    knownDevices.set(nodeExternalIds(gladys, server, node).device, {
+      kind: 'node',
+      serverId: server.id,
+      node,
+    });
   }
   for (const guest of guests) {
-    knownDevices.set(guestExternalIds(gladys, guest.key).device, {
+    knownDevices.set(guestExternalIds(gladys, server, guest.key).device, {
       kind: 'guest',
+      serverId: server.id,
       key: guest.key,
     });
   }
 
   logger.info(
-    `Discovered ${nodes.length} Proxmox node(s): ${nodes.map((entry) => entry.node).join(', ')}` +
-      ` — and ${guests.length} guest(s): ${guests.map((guest) => guest.key).join(', ')}`,
+    `${server.label}: discovered ${nodes.length} Proxmox node(s): ` +
+      `${nodes.map((entry) => entry.node).join(', ')} — and ${guests.length} guest(s): ` +
+      guests.map((guest) => guest.key).join(', '),
   );
 
   return [
-    ...nodes.map(({ node }) => buildNodeDevice(gladys, config, node)),
-    ...guests.map((guest) => buildGuestDevice(gladys, config, guest)),
+    ...nodes.map(({ node }) => buildNodeDevice(gladys, server, node)),
+    ...guests.map((guest) => buildGuestDevice(gladys, server, guest)),
   ];
 }
 
 /**
+ * Discover every monitored node and guest, on every configured server.
+ *
+ * One unreachable server must not hide the other: its failure is collected and
+ * reported instead of aborting the whole discovery.
+ * @param {object} gladys - The SDK instance.
+ * @param {object} config - Normalized configuration.
+ * @returns {Promise<{devices: object[], failures: {server: object, error: Error}[]}>} What
+ *   was discovered, and what failed.
+ */
+export async function discoverDevices(gladys, config) {
+  knownDevices.clear();
+
+  const devices = [];
+  const failures = [];
+  for (const server of listServers(config)) {
+    try {
+      devices.push(...(await discoverServer(gladys, server)));
+    } catch (error) {
+      logger.error(`Discovery failed on ${server.label} (${server.host})`, error);
+      failures.push({ server, error });
+    }
+  }
+  return { devices, failures };
+}
+
+/**
+ * The devices discovered so far, in discovery order.
+ * @param {string} kind - 'node' or 'guest'.
+ * @param {number} [serverId] - Restrict to one server.
+ * @returns {object[]} The matching descriptors.
+ */
+function monitored(kind, serverId) {
+  return [...knownDevices.values()].filter(
+    (entry) => entry.kind === kind && (serverId === undefined || entry.serverId === serverId),
+  );
+}
+
+/**
  * The node names discovered so far, in discovery order.
+ * @param {number} [serverId] - Restrict to one server.
  * @returns {string[]} The node names.
  */
-export function monitoredNodes() {
-  return [...knownDevices.values()]
-    .filter((entry) => entry.kind === 'node')
-    .map((entry) => entry.node);
+export function monitoredNodes(serverId) {
+  return monitored('node', serverId).map((entry) => entry.node);
 }
 
 /**
  * The guest keys discovered so far, in discovery order.
+ * @param {number} [serverId] - Restrict to one server.
  * @returns {string[]} The guest keys (`qemu-101`, `lxc-200`...).
  */
-export function monitoredGuests() {
-  return [...knownDevices.values()]
-    .filter((entry) => entry.kind === 'guest')
-    .map((entry) => entry.key);
+export function monitoredGuests(serverId) {
+  return monitored('guest', serverId).map((entry) => entry.key);
 }
 
 /**
@@ -141,18 +185,31 @@ export async function pollDevice(gladys, config, device) {
     logger.warn(`onPoll ignored: unknown device ${device?.external_id}`);
     return;
   }
-  if (descriptor.kind === 'node') {
-    await pollNode(gladys, config, descriptor.node);
+  const server = serverById(config, descriptor.serverId);
+  if (!server) {
+    // The device outlived the server it was discovered on: the user emptied
+    // that block of the configuration. Publishing nothing keeps its last known
+    // state instead of inventing one.
+    logger.warn(
+      `onPoll ignored: ${device?.external_id} belongs to Proxmox #${descriptor.serverId}, ` +
+        'which is not configured any more.',
+    );
     return;
   }
-  await pollGuest(gladys, config, descriptor.key);
+  if (descriptor.kind === 'node') {
+    await pollNode(gladys, server, descriptor.node);
+    return;
+  }
+  await pollGuest(gladys, server, descriptor.key);
 }
 
 /**
- * Poll every known device, one after the other.
+ * Poll every known device of every configured server, one after the other.
  *
- * Failures are collected instead of aborting the loop: one unreachable node
- * must not stop the others from being refreshed.
+ * Failures are collected instead of aborting the loop: one unreachable node —
+ * or one unreachable server — must not stop the others from being refreshed.
+ * The servers are walked one at a time so the guest snapshot of each is read
+ * once, not once per guest.
  * @param {object} gladys - The SDK instance.
  * @param {object} config - Normalized configuration.
  * @returns {Promise<object[]>} One result per device.
@@ -162,20 +219,22 @@ export async function pollAllDevices(gladys, config) {
   clearGuestsCache();
 
   const results = [];
-  for (const node of monitoredNodes()) {
-    try {
-      results.push({ kind: 'node', node, backup: await pollNode(gladys, config, node) });
-    } catch (error) {
-      logger.error(`Polling node ${node} failed`, error);
-      results.push({ kind: 'node', node, error: error.message });
+  for (const server of listServers(config)) {
+    for (const node of monitoredNodes(server.id)) {
+      try {
+        results.push({ kind: 'node', server, node, backup: await pollNode(gladys, server, node) });
+      } catch (error) {
+        logger.error(`Polling node ${node} of ${server.label} failed`, error);
+        results.push({ kind: 'node', server, node, error: error.message });
+      }
     }
-  }
-  for (const key of monitoredGuests()) {
-    try {
-      results.push({ kind: 'guest', key, guest: await pollGuest(gladys, config, key) });
-    } catch (error) {
-      logger.error(`Polling guest ${key} failed`, error);
-      results.push({ kind: 'guest', key, error: error.message });
+    for (const key of monitoredGuests(server.id)) {
+      try {
+        results.push({ kind: 'guest', server, key, guest: await pollGuest(gladys, server, key) });
+      } catch (error) {
+        logger.error(`Polling guest ${key} of ${server.label} failed`, error);
+        results.push({ kind: 'guest', server, key, error: error.message });
+      }
     }
   }
   return results;

@@ -17,8 +17,8 @@
       "key": "intro",
       "type": "section",
       "label": {
-        "en": "Read-only API token",
-        "fr": "Jeton d'API en lecture seule"
+        "en": "First Proxmox server — read-only API token",
+        "fr": "Premier serveur Proxmox — jeton d'API en lecture seule"
       },
       "description": {
         "en": "This integration only READS Proxmox: the backup task log of the nodes, and the state of the VMs/LXC. Create a dedicated user, give it the built-in PVEAuditor role on / (Sys.Audit on /nodes and VM.Audit on /vms), then add an API token to that user. With privilege separation enabled, the token needs the same ACL as its user. Full step-by-step in the Documentation link below.",
@@ -40,6 +40,23 @@
           }
         }
       ]
+    },
+    {
+      "key": "label",
+      "type": "string",
+      "label": {
+        "en": "Name of this Proxmox",
+        "fr": "Nom de ce Proxmox"
+      },
+      "description": {
+        "en": "Prefixes the name of every device of this server, e.g. \"Proxmox pve1\". Leave empty to use \"Proxmox\". Renaming it here does not rename the devices Gladys already created.",
+        "fr": "Préfixe le nom de chaque appareil de ce serveur, par exemple « Proxmox pve1 ». Laissez vide pour utiliser « Proxmox ». Le renommer ici ne renomme pas les appareils déjà créés par Gladys."
+      },
+      "placeholder": {
+        "en": "Proxmox",
+        "fr": "Proxmox"
+      },
+      "required": false
     },
     {
       "key": "host",
@@ -153,6 +170,158 @@
       "required": false
     },
     {
+      "key": "second_server",
+      "type": "section",
+      "label": {
+        "en": "Second Proxmox server (optional)",
+        "fr": "Second serveur Proxmox (optionnel)"
+      },
+      "description": {
+        "en": "Leave this block empty if you only have one Proxmox. Filled in, it monitors a second, fully independent server: its own host, its own API token and its own TLS settings, read the same way and needing the same PVEAuditor privileges. Its nodes and its VMs/LXC show up as their own Gladys devices, so a node called pve on both servers stays two distinct devices.",
+        "fr": "Laissez ce bloc vide si vous n'avez qu'un seul Proxmox. Renseigné, il surveille un second serveur totalement indépendant : son propre hôte, son propre jeton d'API et ses propres réglages TLS, lus de la même façon et nécessitant les mêmes droits PVEAuditor. Ses nœuds et ses VM/LXC apparaissent comme des appareils Gladys distincts : un nœud nommé pve présent sur les deux serveurs reste deux appareils."
+      }
+    },
+    {
+      "key": "label_2",
+      "type": "string",
+      "label": {
+        "en": "Name of this Proxmox",
+        "fr": "Nom de ce Proxmox"
+      },
+      "description": {
+        "en": "Prefixes the name of every device of this server, e.g. \"Proxmox 2 pve1\". Leave empty to use \"Proxmox 2\". Renaming it here does not rename the devices Gladys already created.",
+        "fr": "Préfixe le nom de chaque appareil de ce serveur, par exemple « Proxmox 2 pve1 ». Laissez vide pour utiliser « Proxmox 2 ». Le renommer ici ne renomme pas les appareils déjà créés par Gladys."
+      },
+      "placeholder": {
+        "en": "Proxmox 2",
+        "fr": "Proxmox 2"
+      },
+      "required": false
+    },
+    {
+      "key": "host_2",
+      "type": "string",
+      "label": {
+        "en": "Proxmox host",
+        "fr": "Hôte Proxmox"
+      },
+      "description": {
+        "en": "IP address or hostname of a node of the SECOND Proxmox VE installation. Leave empty if you only have one.",
+        "fr": "Adresse IP ou nom d'hôte d'un nœud de la SECONDE installation Proxmox VE. Laissez vide si vous n'en avez qu'une."
+      },
+      "placeholder": {
+        "en": "192.168.1.10",
+        "fr": "192.168.1.10"
+      },
+      "required": false
+    },
+    {
+      "key": "port_2",
+      "type": "number",
+      "label": {
+        "en": "API port",
+        "fr": "Port de l'API"
+      },
+      "description": {
+        "en": "HTTPS port of the Proxmox VE API. The default Proxmox port is 8006.",
+        "fr": "Port HTTPS de l'API Proxmox VE. Le port Proxmox par défaut est 8006."
+      },
+      "required": false,
+      "default": 8006,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "key": "token_id_2",
+      "type": "string",
+      "label": {
+        "en": "API token ID",
+        "fr": "Identifiant du jeton d'API"
+      },
+      "description": {
+        "en": "Full token id of the second server, in the user@realm!tokenname form.",
+        "fr": "Identifiant complet du jeton du second serveur, sous la forme utilisateur@realm!nomdujeton."
+      },
+      "placeholder": {
+        "en": "gladys@pve!tasks",
+        "fr": "gladys@pve!tasks"
+      },
+      "required": false
+    },
+    {
+      "key": "token_secret_2",
+      "type": "secret",
+      "label": {
+        "en": "API token secret",
+        "fr": "Secret du jeton d'API"
+      },
+      "description": {
+        "en": "The secret value the second Proxmox shows ONCE when the token is created. Stored encrypted by Gladys and never sent back to the browser.",
+        "fr": "La valeur secrète affichée UNE SEULE FOIS par le second Proxmox à la création du jeton. Stockée chiffrée par Gladys et jamais renvoyée au navigateur."
+      },
+      "required": false
+    },
+    {
+      "key": "tls_fingerprint_2",
+      "type": "string",
+      "label": {
+        "en": "TLS certificate fingerprint",
+        "fr": "Empreinte du certificat TLS"
+      },
+      "description": {
+        "en": "Recommended with the default self-signed Proxmox certificate: pin its SHA-256 fingerprint (Datacenter > Certificates > pveproxy-ssl.pem). Leave empty when the node serves a certificate signed by a public CA.",
+        "fr": "Recommandé avec le certificat auto-signé Proxmox par défaut : épinglez son empreinte SHA-256 (Datacenter > Certificats > pveproxy-ssl.pem). Laissez vide si le nœud présente un certificat signé par une AC publique."
+      },
+      "placeholder": {
+        "en": "AA:BB:CC:...:FF",
+        "fr": "AA:BB:CC:...:FF"
+      },
+      "required": false
+    },
+    {
+      "key": "tls_verify_2",
+      "type": "boolean",
+      "label": {
+        "en": "Verify the TLS certificate",
+        "fr": "Vérifier le certificat TLS"
+      },
+      "description": {
+        "en": "Turn OFF only as a last resort, on a trusted LAN: the connection stays encrypted but nothing proves the server is the real one. Pinning the fingerprint above is the safe way to accept a self-signed certificate.",
+        "fr": "À désactiver en dernier recours seulement, sur un réseau local de confiance : la connexion reste chiffrée mais rien ne prouve l'identité du serveur. Épingler l'empreinte ci-dessus est la façon sûre d'accepter un certificat auto-signé."
+      },
+      "required": false,
+      "default": true
+    },
+    {
+      "key": "nodes_filter_2",
+      "type": "string",
+      "label": {
+        "en": "Nodes to monitor",
+        "fr": "Nœuds à surveiller"
+      },
+      "description": {
+        "en": "Comma-separated node names. Leave empty to monitor every node the token can see. VMs and LXC are filtered the same way: only the guests running on those nodes are reported.",
+        "fr": "Noms de nœuds séparés par des virgules. Laissez vide pour surveiller tous les nœuds visibles par le jeton. Les VM et LXC sont filtrées de la même façon : seuls les invités hébergés par ces nœuds sont remontés."
+      },
+      "placeholder": {
+        "en": "pve1, pve2",
+        "fr": "pve1, pve2"
+      },
+      "required": false
+    },
+    {
+      "key": "shared_options",
+      "type": "section",
+      "label": {
+        "en": "Backups and display",
+        "fr": "Sauvegardes et affichage"
+      },
+      "description": {
+        "en": "These settings apply to every configured Proxmox server.",
+        "fr": "Ces réglages s’appliquent à tous les serveurs Proxmox configurés."
+      }
+    },
+    {
       "key": "backup_lookback_days",
       "type": "number",
       "label": {
@@ -240,10 +409,10 @@
         "fr": "Tester la connexion"
       },
       "description": {
-        "en": "Checks the host, the API token and the read-only permissions, node by node, and counts the visible VMs/LXC.",
-        "fr": "Vérifie l'hôte, le jeton d'API et les droits en lecture seule, nœud par nœud, et compte les VM/LXC visibles."
+        "en": "Checks the host, the API token and the read-only permissions, node by node, and counts the visible VMs/LXC — on every configured server.",
+        "fr": "Vérifie l'hôte, le jeton d'API et les droits en lecture seule, nœud par nœud, et compte les VM/LXC visibles — sur chaque serveur configuré."
       },
-      "timeout_seconds": 45
+      "timeout_seconds": 60
     },
     {
       "key": "refresh_now",
@@ -255,7 +424,7 @@
         "en": "Reads the backups and the VM/LXC states immediately instead of waiting for the next refresh.",
         "fr": "Lit les sauvegardes et l'état des VM/LXC immédiatement au lieu d'attendre le prochain rafraîchissement."
       },
-      "timeout_seconds": 60
+      "timeout_seconds": 90
     }
   ]
 }

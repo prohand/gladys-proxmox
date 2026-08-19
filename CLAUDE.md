@@ -5,10 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Gladys Assistant **external integration** (Node 20+, ESM, zero runtime deps
-beyond `@gladysassistant/integration-sdk`) that reads a Proxmox VE cluster and
-publishes one Gladys device per node (last `vzdump` backup: timestamp, duration,
-success) and one per VM/LXC (running or not). It runs as a sandboxed container
-next to Gladys, talking to it over the SDK's WebSocket.
+beyond `@gladysassistant/integration-sdk`) that reads one or two Proxmox VE
+clusters and publishes one Gladys device per node (last `vzdump` backup:
+timestamp, duration, success) and one per VM/LXC (running or not). It runs as a
+sandboxed container next to Gladys, talking to it over the SDK's WebSocket.
 
 ## Commands
 
@@ -47,17 +47,24 @@ holds no Proxmox logic. Three layers below it:
   above dispatches on that `kind`, never on the message. `nodes.js`,
   `backups.js`, `guests.js` each own one endpoint.
 - `src/devices/` — Gladys device shapes. `index.js` is the registry: devices are
-  **discovered**, not static, and it maps a Gladys `external_id` back to a node
-  name or a guest key so `onPoll` reaches the right reader (it can rebuild that
-  mapping from the id prefix alone, for a poll arriving after a restart with no
-  discovery yet). `proxmoxNode.js` / `proxmoxGuest.js` build the discovery
-  payload and publish states for their type.
+  **discovered**, not static, and it maps a Gladys `external_id` back to a
+  server plus a node name or a guest key so `onPoll` reaches the right reader
+  (it can rebuild that mapping from the id alone, for a poll arriving after a
+  restart with no discovery yet). `proxmoxNode.js` / `proxmoxGuest.js` build the
+  discovery payload and publish states for their type.
+- `src/servers.js` — the flat configuration form (one block of fields per
+  server, the second suffixed `_2`) turned into a list of **server objects**.
+  A server object is config-shaped — per-server fields merged with the shared
+  settings — so every function of `src/proxmox/` takes one and knows nothing
+  about there being several. It also owns the external-id scoping
+  (`scopeId()` / `parseScopedId()`).
 - `src/config.js`, `src/format.js`, `src/actions.js` — normalization/bounds,
   timezone and duration rendering, and the Configuration-screen buttons.
 
 Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
-`buildDiscoveredDevices()` → `publishDiscoveredDevices()`; `onPoll(device)` →
-`pollDevice()` → `pollNode()` or `pollGuest()` → `publishStates()`.
+`discoverDevices()` (per configured server) → `publishDiscoveredDevices()`;
+`onPoll(device)` → `pollDevice()` → `pollNode()` or `pollGuest()` →
+`publishStates()`.
 
 ### Invariants worth keeping
 
@@ -76,6 +83,13 @@ Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
   "OK".
 - **Guest ids are `<kind>-<vmid>`**, never node-based: the VMID is cluster-wide
   and survives a migration.
+- **The first server's external ids stay unscoped.** `scopeId()` prefixes only
+  the second server (`2@pve1`, `2@qemu-101`); server 1 keeps the bare id every
+  single-Proxmox installation already stores. Changing that would orphan every
+  existing device. The label is cosmetic and must never enter an external id.
+- **One unreachable server must not hide the other.** `discoverDevices()`
+  returns `{ devices, failures }` instead of throwing; the connection status
+  names the server that failed while the other keeps polling.
 - **Portability fallbacks are cached, not retried.** A node that answers `400`
   to `typefilter=vzdump` is remembered in `backups.js` and filtered client-side
   from then on. `/cluster/resources` answers are cached ~15 s so one poll round
@@ -90,8 +104,9 @@ Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
 `gladys-assistant-integration.json` drives the Configuration screen and the
 store indexer. It must stay in sync with the code, and `test/manifest.test.js`
 pins that: manifest defaults ≡ `DEFAULT_CONFIG`, every action key has an
-`onAction` handler, `docker_image` tag ≡ `version`, `description.{en,fr}` ≤ 100
-characters. Validate with `npx github:GladysAssistant/integration-store .`
+`onAction` handler, both server blocks declare the same fields with the same
+types (only the first is `required`), `docker_image` tag ≡ `version`,
+`description.{en,fr}` ≤ 100 characters. Validate with `npx github:GladysAssistant/integration-store .`
 before publishing — the image-not-found error it reports is expected until the
 Release workflow has actually built that tag.
 
@@ -103,7 +118,7 @@ unless deliberately overriding it.
 ## Tests
 
 `test/helpers/fakeProxmox.js` starts a **real self-signed HTTPS server** on an
-ephemeral port, so TLS posture, the `Authorization: PVEAPIToken=…` header, the
+ephemeral port — two of them, for the multi-server tests — so TLS posture, the `Authorization: PVEAPIToken=…` header, the
 query string and the `401`/`403` mapping are exercised on the wire rather than
 mocked. `test/helpers/fakeGladys.js` is an in-memory stand-in for the SDK
 recording `publishStates` / `setConnectionStatus`. Module-level caches

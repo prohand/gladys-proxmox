@@ -22,15 +22,15 @@ import { splitList } from '../config.js';
  * `GET /nodes` needs no particular privilege (`user => 'all'` in Proxmox), so
  * it succeeds even with a token that cannot read a single task: the per-node
  * privilege is checked separately.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @returns {Promise<{node: string, status: string}[]>} The monitored nodes.
  */
-export async function listNodes(config) {
-  const data = await get(config, '/nodes');
+export async function listNodes(server) {
+  const data = await get(server, '/nodes');
   if (!Array.isArray(data)) {
     throw new ProxmoxError('parse', 'Proxmox returned an unexpected answer for the node list.');
   }
-  const wanted = splitList(config.nodes_filter).map((name) => name.toLowerCase());
+  const wanted = splitList(server.nodes_filter).map((name) => name.toLowerCase());
   return data
     .filter((entry) => typeof entry?.node === 'string' && entry.node.length > 0)
     .filter((entry) => wanted.length === 0 || wanted.includes(entry.node.toLowerCase()))
@@ -40,12 +40,12 @@ export async function listNodes(config) {
 
 /**
  * Is this node one of those the user asked to monitor?
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {string} node - Node name.
  * @returns {boolean} True when the filter is empty or lists that node.
  */
-export function isMonitoredNode(config, node) {
-  const wanted = splitList(config.nodes_filter).map((name) => name.toLowerCase());
+export function isMonitoredNode(server, node) {
+  const wanted = splitList(server.nodes_filter).map((name) => name.toLowerCase());
   return wanted.length === 0 || wanted.includes(String(node ?? '').toLowerCase());
 }
 
@@ -57,13 +57,13 @@ export function isMonitoredNode(config, node) {
  * answers 403 when the privilege is missing, where the task list would just
  * hand back a silently filtered result. Read-only, and it touches nothing the
  * integration does not already need.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {string} node - Node name.
  * @returns {Promise<{node: string, granted: boolean, reason?: string}>} The probe result.
  */
-export async function probeNodeAudit(config, node) {
+export async function probeNodeAudit(server, node) {
   try {
-    await get(config, `/nodes/${encodeURIComponent(node)}/status`);
+    await get(server, `/nodes/${encodeURIComponent(node)}/status`);
     return { node, granted: true };
   } catch (error) {
     if (error instanceof ProxmoxError && error.kind === 'permission') {

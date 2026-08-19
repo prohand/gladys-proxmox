@@ -7,6 +7,7 @@ import {
 } from '@gladysassistant/integration-sdk';
 import { createFakeGladys } from './helpers/fakeGladys.js';
 import { normalizeConfig } from '../src/config.js';
+import { listServers } from '../src/servers.js';
 import { buildNodeDevice, FEATURE, nodeExternalIds } from '../src/devices/proxmoxNode.js';
 import {
   buildGuestDevice,
@@ -15,7 +16,17 @@ import {
 } from '../src/devices/proxmoxGuest.js';
 import { describeDevice } from '../src/devices/index.js';
 
-const config = normalizeConfig({ backup_lookback_days: 12, poll_frequency: 600 });
+const CONFIG = normalizeConfig({
+  host: 'pve.lan',
+  token_id: 'a@pve!b',
+  token_secret: 's',
+  host_2: 'pve2.lan',
+  token_id_2: 'c@pve!d',
+  token_secret_2: 's2',
+  backup_lookback_days: 12,
+  poll_frequency: 600,
+});
+const [server, secondServer] = listServers(CONFIG);
 
 const GUEST = {
   key: 'qemu-101',
@@ -29,7 +40,7 @@ const GUEST = {
 
 test('a node device carries the three read-only backup features', () => {
   const gladys = createFakeGladys();
-  const device = buildNodeDevice(gladys, config, 'pve1');
+  const device = buildNodeDevice(gladys, server, 'pve1');
 
   assert.equal(device.name, 'Proxmox pve1');
   assert.equal(device.external_id, 'ext:proxmox:proxmox-node:pve1');
@@ -65,7 +76,7 @@ test('a node device carries the three read-only backup features', () => {
 
 test('a guest device carries a single binary status feature', () => {
   const gladys = createFakeGladys();
-  const device = buildGuestDevice(gladys, config, GUEST);
+  const device = buildGuestDevice(gladys, server, GUEST);
 
   assert.equal(device.name, 'Proxmox nextcloud (101)');
   assert.equal(device.external_id, 'ext:proxmox:proxmox-guest:qemu-101');
@@ -83,16 +94,52 @@ test('a guest device carries a single binary status feature', () => {
 
 test('a guest with no name still gets a distinguishable device name', () => {
   assert.equal(
-    guestDeviceName({ ...GUEST, name: '', kind: 'lxc', vmid: 200 }),
+    guestDeviceName(server, { ...GUEST, name: '', kind: 'lxc', vmid: 200 }),
     'Proxmox LXC (200)',
   );
+});
+
+test('the second server names and identifies its devices apart from the first', () => {
+  const gladys = createFakeGladys();
+  const node = buildNodeDevice(gladys, secondServer, 'pve1');
+  const guest = buildGuestDevice(gladys, secondServer, GUEST);
+
+  // Same node name, same VMID, on the other Proxmox: neither the id nor the
+  // name may collide with the first server's.
+  assert.equal(node.name, 'Proxmox 2 pve1');
+  assert.equal(node.external_id, 'ext:proxmox:proxmox-node:2@pve1');
+  assert.equal(guest.name, 'Proxmox 2 nextcloud (101)');
+  assert.equal(guest.external_id, 'ext:proxmox:proxmox-guest:2@qemu-101');
+  assert.notEqual(node.external_id, buildNodeDevice(gladys, server, 'pve1').external_id);
+  assert.notEqual(guest.external_id, buildGuestDevice(gladys, server, GUEST).external_id);
+});
+
+test('a labelled server prefixes its device names with that label', () => {
+  const gladys = createFakeGladys();
+  const [home, office] = listServers(
+    normalizeConfig({
+      host: 'pve.lan',
+      token_id: 'a@pve!b',
+      token_secret: 's',
+      label: 'Home',
+      host_2: 'pve2.lan',
+      token_id_2: 'c@pve!d',
+      token_secret_2: 's2',
+      label_2: 'Office',
+    }),
+  );
+  assert.equal(buildNodeDevice(gladys, home, 'pve1').name, 'Home pve1');
+  assert.equal(buildGuestDevice(gladys, office, GUEST).name, 'Office nextcloud (101)');
+  // The label is cosmetic: it must never leak into an external id, or renaming
+  // a server would orphan all of its devices.
+  assert.equal(buildNodeDevice(gladys, home, 'pve1').external_id, 'ext:proxmox:proxmox-node:pve1');
 });
 
 test('no feature of the integration is controllable', () => {
   const gladys = createFakeGladys();
   const devices = [
-    buildNodeDevice(gladys, config, 'pve1'),
-    buildGuestDevice(gladys, config, GUEST),
+    buildNodeDevice(gladys, server, 'pve1'),
+    buildGuestDevice(gladys, server, GUEST),
   ];
   for (const device of devices) {
     for (const feature of device.features) {
@@ -104,20 +151,28 @@ test('no feature of the integration is controllable', () => {
 
 test('external ids are unique per node and stable', () => {
   const gladys = createFakeGladys();
-  assert.notEqual(nodeExternalIds(gladys, 'pve1').device, nodeExternalIds(gladys, 'pve2').device);
-  assert.equal(nodeExternalIds(gladys, 'pve1').device, nodeExternalIds(gladys, 'pve1').device);
+  assert.notEqual(
+    nodeExternalIds(gladys, server, 'pve1').device,
+    nodeExternalIds(gladys, server, 'pve2').device,
+  );
+  assert.equal(
+    nodeExternalIds(gladys, server, 'pve1').device,
+    nodeExternalIds(gladys, server, 'pve1').device,
+  );
 });
 
 test('describeDevice recovers a node from its external id, without a discovery', () => {
   const gladys = createFakeGladys();
   assert.deepEqual(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-node:pve1' }), {
     kind: 'node',
+    serverId: 1,
     node: 'pve1',
   });
   // A node name containing the separator still round-trips: the prefix is
   // stripped, the remainder is the name.
   assert.deepEqual(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-node:pve-a:b' }), {
     kind: 'node',
+    serverId: 1,
     node: 'pve-a:b',
   });
 });
@@ -126,10 +181,28 @@ test('describeDevice recovers a guest from its external id', () => {
   const gladys = createFakeGladys();
   assert.deepEqual(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-guest:qemu-101' }), {
     kind: 'guest',
+    serverId: 1,
     key: 'qemu-101',
   });
   assert.deepEqual(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-guest:lxc-200' }), {
     kind: 'guest',
+    serverId: 1,
+    key: 'lxc-200',
+  });
+});
+
+test('describeDevice tells which server a scoped external id belongs to', () => {
+  // A poll arriving after a restart, before any discovery ran: the id alone
+  // has to say which Proxmox to read.
+  const gladys = createFakeGladys();
+  assert.deepEqual(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-node:2@pve1' }), {
+    kind: 'node',
+    serverId: 2,
+    node: 'pve1',
+  });
+  assert.deepEqual(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-guest:2@lxc-200' }), {
+    kind: 'guest',
+    serverId: 2,
     key: 'lxc-200',
   });
 });
@@ -140,4 +213,6 @@ test('describeDevice ignores a device that is not ours', () => {
   assert.equal(describeDevice(gladys, {}), null);
   assert.equal(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-node:' }), null);
   assert.equal(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-guest:vm-101' }), null);
+  assert.equal(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-guest:2@vm-101' }), null);
+  assert.equal(describeDevice(gladys, { external_id: 'ext:proxmox:proxmox-node:2@' }), null);
 });

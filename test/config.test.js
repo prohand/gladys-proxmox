@@ -79,6 +79,35 @@ test('splitList trims the entries and drops the empty ones', () => {
   assert.deepEqual(splitList(undefined), []);
 });
 
+test('the second server block is normalized exactly like the first', () => {
+  const config = normalizeConfig({
+    host_2: '  pve2.lan  ',
+    port_2: '8007',
+    token_id_2: ' b@pve!c ',
+    token_secret_2: ' s2 ',
+    tls_verify_2: false,
+    nodes_filter_2: ' pveB ',
+  });
+  assert.equal(config.host_2, 'pve2.lan');
+  assert.equal(config.port_2, 8007);
+  assert.equal(config.token_id_2, 'b@pve!c');
+  assert.equal(config.token_secret_2, 's2');
+  assert.equal(config.tls_verify_2, false);
+  assert.equal(config.nodes_filter_2, 'pveB');
+  // The two blocks are independent: filling the second one changes nothing of
+  // the first.
+  assert.equal(config.host, '');
+  assert.equal(config.tls_verify, true);
+});
+
+test('an untouched second block keeps its defaults', () => {
+  const config = normalizeConfig({ host: 'pve.lan', token_id: 'a@pve!b', token_secret: 's' });
+  assert.equal(config.host_2, '');
+  assert.equal(config.port_2, 8006);
+  assert.equal(config.tls_verify_2, true);
+  assert.equal(config.label_2, '');
+});
+
 test('isConfigured requires the host and both token fields', () => {
   assert.equal(isConfigured(normalizeConfig()), false);
   assert.equal(isConfigured(normalizeConfig({ host: 'pve.lan', token_id: 'a@pve!b' })), false);
