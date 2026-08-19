@@ -1,6 +1,6 @@
 {
   "name": "gladys-proxmox",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Gladys Assistant external integration reporting Proxmox VE backups per node and the state of every VM/LXC.",
   "type": "module",
