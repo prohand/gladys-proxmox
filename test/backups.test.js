@@ -1,12 +1,12 @@
 // -----------------------------------------------------------------------------
-// The classification rules that decide what "a failed task" means.
+// The classification rules that decide whether a backup succeeded.
 // They mirror Proxmox's own `PVE::UPID::normalize_status_type`, so they are
-// pinned here: a drift would silently change what the counter counts.
+// pinned here: a drift would silently flip the "Backup status" feature.
 // -----------------------------------------------------------------------------
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { failingStatusTypes, normalizeStatusType } from '../src/proxmox/tasks.js';
+import { normalizeStatusType, successStatusTypes } from '../src/proxmox/backups.js';
 
 test('normalizeStatusType classifies a status like Proxmox does', () => {
   assert.equal(normalizeStatusType('OK'), 'ok');
@@ -23,17 +23,20 @@ test('a status that merely mentions warnings is an error, not a warning', () => 
   assert.equal(normalizeStatusType('job failed with WARNINGS: 2'), 'error');
 });
 
-test('the default scope counts errors and status-less tasks, not warnings', () => {
-  const failing = failingStatusTypes('errors');
-  assert.equal(failing.has('error'), true);
-  assert.equal(failing.has('unknown'), true);
-  assert.equal(failing.has('warning'), false);
-  assert.equal(failing.has('ok'), false);
+test('the default scope calls a backup successful only when it ended OK', () => {
+  const success = successStatusTypes('ok_only');
+  assert.equal(success.has('ok'), true);
+  assert.equal(success.has('warning'), false);
+  assert.equal(success.has('error'), false);
+  assert.equal(success.has('unknown'), false);
 });
 
-test('the wide scope also counts warnings', () => {
-  const failing = failingStatusTypes('errors_and_warnings');
-  assert.equal(failing.has('warning'), true);
-  assert.equal(failing.has('error'), true);
-  assert.equal(failing.has('ok'), false);
+test('the wide scope also accepts a backup that ended with warnings', () => {
+  const success = successStatusTypes('ok_and_warnings');
+  assert.equal(success.has('ok'), true);
+  assert.equal(success.has('warning'), true);
+  assert.equal(success.has('error'), false);
+  // A task that left no exit status behind is a crashed worker, never a
+  // success, whatever the scope.
+  assert.equal(success.has('unknown'), false);
 });

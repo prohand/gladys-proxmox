@@ -12,30 +12,35 @@ test('normalizeConfig keeps the user values over the defaults', () => {
     port: 8006,
     token_id: 'gladys@pve!tasks',
     token_secret: 'secret',
-    lookback_hours: 48,
+    backup_lookback_days: 30,
   });
   assert.equal(config.host, 'pve.lan');
   assert.equal(config.token_id, 'gladys@pve!tasks');
-  assert.equal(config.lookback_hours, 48);
+  assert.equal(config.backup_lookback_days, 30);
 });
 
 test('normalizeConfig coerces numeric strings coming from the form', () => {
-  const config = normalizeConfig({ port: '8006', lookback_hours: '12', poll_frequency: '600' });
+  const config = normalizeConfig({
+    port: '8006',
+    backup_lookback_days: '14',
+    poll_frequency: '600',
+  });
   assert.equal(config.port, 8006);
-  assert.equal(config.lookback_hours, 12);
+  assert.equal(config.backup_lookback_days, 14);
   assert.equal(config.poll_frequency, 600);
   assert.equal(typeof config.poll_frequency, 'number');
 });
 
 test('normalizeConfig clamps numbers to the manifest bounds', () => {
-  const config = normalizeConfig({ poll_frequency: 5, lookback_hours: 100000, port: 0 });
+  const config = normalizeConfig({ poll_frequency: 5, backup_lookback_days: 100000, port: 0 });
   assert.equal(config.poll_frequency, 60);
-  assert.equal(config.lookback_hours, 720);
+  assert.equal(config.backup_lookback_days, 365);
   assert.equal(config.port, 1);
 });
 
 test('normalizeConfig falls back to the default for a non-numeric value', () => {
   assert.equal(normalizeConfig({ poll_frequency: 'soon' }).poll_frequency, 300);
+  assert.equal(normalizeConfig({ backup_lookback_days: 'a week' }).backup_lookback_days, 7);
 });
 
 test('normalizeConfig trims the credential fields', () => {
@@ -56,13 +61,16 @@ test('only an explicit false turns the TLS verification off', () => {
   assert.equal(normalizeConfig({ tls_verify: false }).tls_verify, false);
 });
 
-test('failure_scope only accepts the two declared options', () => {
+test('backup_success_scope only accepts the two declared options', () => {
   assert.equal(
-    normalizeConfig({ failure_scope: 'errors_and_warnings' }).failure_scope,
-    'errors_and_warnings',
+    normalizeConfig({ backup_success_scope: 'ok_and_warnings' }).backup_success_scope,
+    'ok_and_warnings',
   );
-  assert.equal(normalizeConfig({ failure_scope: 'anything-else' }).failure_scope, 'errors');
-  assert.equal(normalizeConfig().failure_scope, 'errors');
+  assert.equal(
+    normalizeConfig({ backup_success_scope: 'anything-else' }).backup_success_scope,
+    'ok_only',
+  );
+  assert.equal(normalizeConfig().backup_success_scope, 'ok_only');
 });
 
 test('splitList trims the entries and drops the empty ones', () => {

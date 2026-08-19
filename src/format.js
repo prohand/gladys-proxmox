@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// Rendering of the "recent failure details" text.
+// Rendering of the values shown on the dashboard.
 //
 // Proxmox stores task timestamps as UNIX epoch seconds (UTC). What the user
 // wants to read is their own wall clock, so every timestamp goes through
@@ -11,10 +11,11 @@ import { createLogger } from '@gladysassistant/integration-sdk';
 
 const logger = createLogger({ name: 'format' });
 
-// The text feature is meant to be read at a glance on a dashboard tile: cap it
-// so a burst of failures with very long Proxmox error strings cannot turn it
-// into a wall of text.
-export const MAX_DETAILS_LENGTH = 2000;
+// What the "Last backup" feature holds when the window contains no backup.
+// Deliberately the same word the Gladys interface uses for a feature that has
+// never received a state.
+export const UNKNOWN_TEXT = 'unknown';
+
 // One Proxmox error string can be a whole shell command plus its output.
 const MAX_STATUS_LENGTH = 160;
 
@@ -116,55 +117,36 @@ export function formatStatus(status, statusType) {
 }
 
 /**
- * Build the human-readable label of a task: its Proxmox type, plus the guest
- * or resource it acted on when there is one.
- * @param {object} task - A normalized task.
- * @returns {string} e.g. "vzdump (101)".
+ * Render the "Last backup" text of a node: when the last backup STARTED, in the
+ * user's time zone, with that zone named so the wall clock is unambiguous.
+ * @param {object|null} backup - The last backup, or null when there is none.
+ * @param {string} timezone - A resolved IANA time zone.
+ * @returns {string} e.g. "2026-08-19 02:00:00 (Europe/Paris)", or "unknown".
  */
-export function formatTaskLabel(task) {
-  return task.id ? `${task.type} (${task.id})` : task.type;
+export function formatLastBackup(backup, timezone) {
+  if (!backup || !Number.isFinite(backup.starttime)) {
+    return UNKNOWN_TEXT;
+  }
+  return `${formatTimestamp(backup.starttime, timezone)} (${timezone})`;
 }
 
 /**
- * Render the "recent failure details" text of one node.
- *
- * One block per failure: the task type, when it started and ended in the
- * user's time zone, how long it ran, and the status Proxmox recorded.
- * @param {object} options - Options.
- * @param {string} options.node - Node name.
- * @param {object[]} options.tasks - Failed tasks, most recent first.
- * @param {object} options.config - Normalized configuration.
- * @returns {string} The details text, capped at MAX_DETAILS_LENGTH characters.
+ * One-line summary of a node's backup state, for the logs and the action
+ * messages.
+ * @param {string} node - Node name.
+ * @param {object|null} backup - The last backup, or null when there is none.
+ * @param {string} timezone - A resolved IANA time zone.
+ * @returns {string} e.g. "pve1: 2026-08-19 02:00:00, 4 min 8 s, OK".
  */
-export function formatFailureDetails({ node, tasks, config }) {
-  const timezone = resolveTimezone(config.timezone);
-  const window = `${config.lookback_hours} h`;
-
-  if (tasks.length === 0) {
-    return `No failed task on ${node} in the last ${window}.`;
+export function formatBackupSummary(node, backup, timezone) {
+  if (!backup) {
+    return `${node}: no backup`;
   }
-
-  const shown = tasks.slice(0, config.max_failures_listed);
-  const header =
-    tasks.length === 1
-      ? `1 failed task on ${node} in the last ${window} (times in ${timezone}):`
-      : `${tasks.length} failed tasks on ${node} in the last ${window} (times in ${timezone}):`;
-
-  const blocks = shown.map((task) => {
-    const started = formatTimestamp(task.starttime, timezone);
-    const ended = formatTimestamp(task.endtime, timezone);
-    const duration = task.endtime === null ? '' : formatDuration(task.endtime - task.starttime);
-    const timing = duration ? `${started} → ${ended} (${duration})` : `${started} → ${ended}`;
-    return [
-      `• ${formatTaskLabel(task)}`,
-      `  ${timing}`,
-      `  status: ${formatStatus(task.status, task.statusType)}`,
-    ].join('\n');
-  });
-
-  const hidden = tasks.length - shown.length;
-  const footer = hidden > 0 ? [`… and ${hidden} more failure(s) in the window.`] : [];
-
-  const text = [header, ...blocks, ...footer].join('\n');
-  return text.length > MAX_DETAILS_LENGTH ? `${text.slice(0, MAX_DETAILS_LENGTH - 1)}…` : text;
+  const parts = [formatTimestamp(backup.starttime, timezone)];
+  const duration = formatDuration(backup.duration);
+  if (duration) {
+    parts.push(duration);
+  }
+  parts.push(formatStatus(backup.status, backup.statusType));
+  return `${node}: ${parts.join(', ')}`;
 }

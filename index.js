@@ -6,7 +6,7 @@
 // in `src/devices/` — it only:
 //   1. instantiates the SDK (connection, auth, reconnection: handled for you);
 //   2. registers the event handlers BEFORE connect();
-//   3. connects, discovers the nodes and publishes them.
+//   3. connects, discovers the nodes and guests, and publishes them.
 //
 // Environment variables provided by the Gladys supervisor to the container:
 //   - GLADYS_HOST_API_URL         (host API URL)
@@ -27,7 +27,7 @@ let config = normalizeConfig();
 
 // --- Discovery: Gladys asks for the list of devices --------------------------
 gladys.onScanRequest(async () => {
-  logger.info('onScanRequest -> discovering Proxmox nodes');
+  logger.info('onScanRequest -> discovering Proxmox nodes and guests');
   if (!isConfigured(config)) {
     // Throw: the SDK acknowledges with success:false, and the user sees why in
     // the Discovery tab instead of an empty list with no explanation.
@@ -36,7 +36,7 @@ gladys.onScanRequest(async () => {
   await publishDevices();
 });
 
-// --- Polling: Gladys asks to refresh one device (one node) -------------------
+// --- Polling: Gladys asks to refresh one device (a node, or a guest) ---------
 gladys.onPoll(async (device) => {
   if (!isConfigured(config)) {
     logger.warn('onPoll ignored: the integration is not configured yet');
@@ -53,9 +53,9 @@ gladys.onAction('refresh_now', () => refreshNow(gladys, config));
 gladys.onConfigUpdated(async (newConfig) => {
   logger.info('onConfigUpdated -> new configuration received');
   config = normalizeConfig(newConfig);
-  // The node list, the poll frequency and the "failed tasks (N h)" feature
-  // name all depend on the configuration: re-publish. publishDiscoveredDevices
-  // is idempotent (upsert by external_id).
+  // The node list, the guest list and the poll frequency all depend on the
+  // configuration: re-publish. publishDiscoveredDevices is idempotent (upsert
+  // by external_id).
   await initialize();
 });
 
@@ -105,7 +105,7 @@ async function initialize() {
 }
 
 /**
- * Discover the Proxmox nodes and publish them as Gladys devices.
+ * Discover the Proxmox nodes and guests, and publish them as Gladys devices.
  * @returns {Promise<void>} Resolves once the devices are published.
  */
 async function publishDevices() {

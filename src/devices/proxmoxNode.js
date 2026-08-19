@@ -1,15 +1,21 @@
 // -----------------------------------------------------------------------------
 // Device type: PROXMOX NODE
 //
-// One Gladys device per Proxmox node, carrying two read-only features:
-//   - failed task count   : how many tasks failed inside the observation
-//                           window (integer sensor, kept in history so the
-//                           dashboard can chart it);
-//   - failure details     : the recent failures, one block each — task type,
-//                           start and end timestamps in the user's time zone,
-//                           and the status Proxmox recorded (text feature;
-//                           text states are stored as `last_value_string` and
-//                           carry no history, hence `keep_history: false`).
+// One Gladys device per Proxmox node, carrying three read-only features that
+// all describe the LAST BACKUP (`vzdump` task) of that node:
+//   - Last backup      : when it started, in the user's time zone (text
+//                        feature; text states are stored as
+//                        `last_value_string` and carry no history, hence
+//                        `keep_history: false`). Holds "unknown" when the
+//                        window contains no backup at all;
+//   - Backup duration  : how long it ran, in seconds (integer sensor, kept in
+//                        history so the dashboard can chart it);
+//   - Backup status    : ON when that backup succeeded, OFF for any other
+//                        state (binary sensor).
+//
+// The two numeric features are simply left unknown — no state published at all
+// — when the node has no backup in the window: a duration of 0 s and an OFF
+// status would both be lies.
 //
 // The device is never controllable: this integration only reads Proxmox.
 // -----------------------------------------------------------------------------
@@ -18,22 +24,24 @@ import {
   createLogger,
   DEVICE_FEATURE_CATEGORIES,
   DEVICE_FEATURE_TYPES,
+  DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
-import { fetchFailedTasks } from '../proxmox/tasks.js';
-import { formatFailureDetails } from '../format.js';
+import { fetchLastBackup } from '../proxmox/backups.js';
+import { formatBackupSummary, formatLastBackup, resolveTimezone } from '../format.js';
 
 export const DEVICE_TYPE = 'proxmox-node';
 
 const logger = createLogger({ name: DEVICE_TYPE });
 
 export const FEATURE = {
-  FAILED_TASK_COUNT: 'failed-task-count',
-  FAILURE_DETAILS: 'failure-details',
+  LAST_BACKUP: 'last-backup',
+  BACKUP_DURATION: 'backup-duration',
+  BACKUP_STATUS: 'backup-status',
 };
 
-// A node with more failures than this in one window is a broken node, not a
-// measurement: the ceiling only exists because a feature must declare one.
-const MAX_FAILED_TASKS = 1000;
+// A backup running for more than a week is a stuck task, not a measurement: the
+// ceiling only exists because a numeric feature must declare one.
+const MAX_BACKUP_DURATION_SECONDS = 7 * 86400;
 
 /**
  * External ids of the Gladys device representing a Proxmox node.
@@ -64,19 +72,8 @@ export function buildNodeDevice(gladys, config, node) {
     poll_frequency: config.poll_frequency,
     features: [
       {
-        name: `Failed tasks (${config.lookback_hours} h)`,
-        external_id: ids.feature(FEATURE.FAILED_TASK_COUNT),
-        category: DEVICE_FEATURE_CATEGORIES.COUNTER_SENSOR,
-        type: DEVICE_FEATURE_TYPES.SENSOR.INTEGER,
-        min: 0,
-        max: MAX_FAILED_TASKS,
-        read_only: true,
-        has_feedback: false,
-        keep_history: true,
-      },
-      {
-        name: 'Recent failure details',
-        external_id: ids.feature(FEATURE.FAILURE_DETAILS),
+        name: 'Last backup',
+        external_id: ids.feature(FEATURE.LAST_BACKUP),
         category: DEVICE_FEATURE_CATEGORIES.TEXT,
         type: DEVICE_FEATURE_TYPES.TEXT.TEXT,
         read_only: true,
@@ -85,32 +82,75 @@ export function buildNodeDevice(gladys, config, node) {
         // them, so asking for one would be a lie.
         keep_history: false,
       },
+      {
+        name: 'Backup duration',
+        external_id: ids.feature(FEATURE.BACKUP_DURATION),
+        category: DEVICE_FEATURE_CATEGORIES.DURATION,
+        type: DEVICE_FEATURE_TYPES.DURATION.INTEGER,
+        unit: DEVICE_FEATURE_UNITS.SECONDS,
+        min: 0,
+        max: MAX_BACKUP_DURATION_SECONDS,
+        read_only: true,
+        has_feedback: false,
+        keep_history: true,
+      },
+      {
+        name: 'Backup status',
+        external_id: ids.feature(FEATURE.BACKUP_STATUS),
+        category: DEVICE_FEATURE_CATEGORIES.SWITCH,
+        type: DEVICE_FEATURE_TYPES.SWITCH.BINARY,
+        min: 0,
+        max: 1,
+        read_only: true,
+        has_feedback: false,
+        keep_history: true,
+      },
     ],
   };
 }
 
 /**
- * Read the Proxmox task log of one node and publish both features.
+ * Read the last backup of one node and publish its features.
  * @param {object} gladys - The SDK instance.
  * @param {object} config - Normalized configuration.
  * @param {string} node - Proxmox node name.
- * @returns {Promise<number>} The number of failed tasks found.
+ * @returns {Promise<object|null>} The last backup, or null when there is none.
  */
 export async function pollNode(gladys, config, node) {
   const ids = nodeExternalIds(gladys, node);
-  const tasks = await fetchFailedTasks(config, node);
-  const details = formatFailureDetails({ node, tasks, config });
+  const timezone = resolveTimezone(config.timezone);
+  const backup = await fetchLastBackup(config, node);
+
+  // The text feature always gets a state: "unknown" is an answer too, and it is
+  // the one the user needs when a backup job silently stopped running.
+  const states = [
+    {
+      device_feature_external_id: ids.feature(FEATURE.LAST_BACKUP),
+      text: formatLastBackup(backup, timezone),
+    },
+  ];
+
+  if (backup) {
+    states.push({
+      device_feature_external_id: ids.feature(FEATURE.BACKUP_STATUS),
+      state: backup.success ? 1 : 0,
+    });
+    if (backup.duration !== null) {
+      states.push({
+        device_feature_external_id: ids.feature(FEATURE.BACKUP_DURATION),
+        state: Math.min(backup.duration, MAX_BACKUP_DURATION_SECONDS),
+      });
+    }
+  }
 
   logger.info(
-    `Node ${node}: ${tasks.length} failed task(s) in the last ${config.lookback_hours} h`,
+    `Last backup in the last ${config.backup_lookback_days} day(s) — ` +
+      formatBackupSummary(node, backup, timezone),
   );
 
-  // Both features in a single request (batch, up to 100 states): a numeric
-  // state uses `state`, a text state uses `text`.
-  await gladys.publishStates([
-    { device_feature_external_id: ids.feature(FEATURE.FAILED_TASK_COUNT), state: tasks.length },
-    { device_feature_external_id: ids.feature(FEATURE.FAILURE_DETAILS), text: details },
-  ]);
+  // One request for every feature of the device (batch, up to 100 states): a
+  // numeric state uses `state`, a text state uses `text`.
+  await gladys.publishStates(states);
 
-  return tasks.length;
+  return backup;
 }
