@@ -191,7 +191,7 @@ for the optional second one. The last four are shared by both.
 | **How far back to look for a backup**  | no       | `7` d   | The last backup is searched inside this window.                                                         |
 | **What counts as a successful backup** | no       | OK only | Whether a backup that ended with `WARNINGS: n` still counts as successful.                              |
 | **Time zone**                          | no       | host    | IANA zone used to render the timestamp, e.g. `Europe/Paris`.                                            |
-| **Refresh interval**                   | no       | `300` s | How often Proxmox is read.                                                                              |
+| **Refresh interval**                   | no       | `300` s | How often Proxmox is read, between 60 s and one hour.                                                   |
 
 _Proxmox host_ takes a host name or an IP address, but the address you have in
 front of you is the one in your browser — so a pasted URL is accepted as well:
@@ -203,6 +203,11 @@ Only the first server's host and token are mandatory: the whole second block is
 optional. _How far back to look for a backup_, _What counts as a successful
 backup_, _Time zone_ and _Refresh interval_ are configured once and apply to
 every server.
+
+Gladys itself cannot ask for a refresh less often than once a minute, so the
+integration holds the extra wait: it is called every minute and reads Proxmox
+only when the interval you set has elapsed. In between, nothing is published
+and the values already on the dashboard stay as they are.
 
 ### TLS: the self-signed Proxmox certificate
 

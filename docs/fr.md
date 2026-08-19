@@ -196,7 +196,7 @@ curl -sS --insecure \
 | **Ancienneté maximale d'une sauvegarde**       | non    | `7` j   | La dernière sauvegarde est recherchée dans cette fenêtre.                                                                        |
 | **Ce qui compte comme une sauvegarde réussie** | non    | OK seul | Si une sauvegarde terminée en `WARNINGS: n` compte quand même comme réussie.                                                     |
 | **Fuseau horaire**                             | non    | hôte    | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                                        |
-| **Intervalle de rafraîchissement**             | non    | `300` s | Fréquence de lecture de Proxmox.                                                                                                 |
+| **Intervalle de rafraîchissement**             | non    | `300` s | Fréquence de lecture de Proxmox, entre 60 s et une heure.                                                                        |
 
 _Hôte Proxmox_ attend un nom d'hôte ou une adresse IP, mais l'adresse que vous
 avez sous les yeux est celle de votre navigateur : une URL collée est donc
@@ -210,6 +210,12 @@ Proxmox, une fois pour le second (optionnel). Seuls l'hôte et le jeton du
 premier serveur sont obligatoires. _Ancienneté maximale d'une sauvegarde_, _Ce
 qui compte comme une sauvegarde réussie_, _Fuseau horaire_ et _Intervalle de
 rafraîchissement_ se règlent une seule fois et s'appliquent à tous les serveurs.
+
+Gladys ne sait pas demander un rafraîchissement moins souvent qu'une fois par
+minute : c'est donc l'intégration qui tient le reste de l'attente. Elle est
+sollicitée chaque minute et ne lit Proxmox que lorsque l'intervalle que vous
+avez réglé est écoulé. Entre deux lectures, rien n'est publié et les valeurs
+déjà affichées restent en place.
 
 ### TLS : le certificat auto-signé de Proxmox
 

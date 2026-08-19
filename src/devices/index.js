@@ -14,6 +14,7 @@ import { createLogger } from '@gladysassistant/integration-sdk';
 import { listNodes } from '../proxmox/nodes.js';
 import { clearGuestsCache, fetchGuests, parseGuestKey } from '../proxmox/guests.js';
 import { listServers, parseScopedId, serverById } from '../servers.js';
+import { claimPoll, resetPollThrottle } from '../poll.js';
 import {
   buildNodeDevice,
   DEVICE_TYPE as NODE_DEVICE_TYPE,
@@ -128,6 +129,9 @@ async function discoverServer(gladys, server) {
  */
 export async function discoverDevices(gladys, config) {
   knownDevices.clear();
+  // A discovery is a fresh start: whatever the previous interval had already
+  // consumed must not delay the first read of the devices published here.
+  resetPollThrottle();
 
   const devices = [];
   const failures = [];
@@ -196,6 +200,18 @@ export async function pollDevice(gladys, config, device) {
     );
     return;
   }
+  // Gladys polls at the slowest frequency it accepts (once a minute, see
+  // `src/poll.js`); the configured refresh interval is enforced here. A poll
+  // that arrives too early publishes nothing at all, which leaves the last
+  // known state on screen — it does not overwrite it with anything.
+  if (!claimPoll(device.external_id, server.poll_frequency)) {
+    logger.debug(
+      `onPoll skipped: ${device.external_id} was refreshed less than ` +
+        `${server.poll_frequency}s ago.`,
+    );
+    return;
+  }
+
   if (descriptor.kind === 'node') {
     await pollNode(gladys, server, descriptor.node);
     return;

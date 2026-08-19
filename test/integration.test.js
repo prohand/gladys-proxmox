@@ -13,6 +13,7 @@ import { listServers } from '../src/servers.js';
 import { discoverDevices, pollDevice } from '../src/devices/index.js';
 import { fetchLastBackup, resetTypeFilterSupport } from '../src/proxmox/backups.js';
 import { clearGuestsCache, fetchGuests } from '../src/proxmox/guests.js';
+import { GLADYS_POLL_FREQUENCIES, resetPollThrottle } from '../src/poll.js';
 import { listNodes } from '../src/proxmox/nodes.js';
 import { refreshNow, testConnection } from '../src/actions.js';
 
@@ -153,6 +154,7 @@ function taskRoute(tasks) {
 function startCluster(overrides = {}) {
   resetTypeFilterSupport();
   clearGuestsCache();
+  resetPollThrottle();
   return startFakeProxmox({
     '/nodes': NODES,
     '/nodes/pve1/tasks': taskRoute(TASKS),
@@ -375,6 +377,49 @@ test('polling a node publishes the last backup, its duration and its status', as
       'ext:proxmox:proxmox-node:pve1:backup-duration',
     );
     assert.equal(duration.state, 248);
+  } finally {
+    await server.close();
+  }
+});
+
+test('every discovered device declares a poll frequency Gladys accepts', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  try {
+    // Gladys validates `poll_frequency` against a fixed list of values in
+    // MILLISECONDS and rejects the WHOLE publish otherwise, with
+    // "devices[0].poll_frequency: invalid poll frequency" — one bad value and
+    // not a single device is discovered.
+    const { devices } = await discoverDevices(gladys, configFor(server.port));
+    assert.ok(devices.length > 0);
+    for (const device of devices) {
+      assert.ok(
+        GLADYS_POLL_FREQUENCIES.includes(device.poll_frequency),
+        `${device.external_id} publishes ${device.poll_frequency}`,
+      );
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test('a poll arriving before the configured interval reads nothing', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  const config = configFor(server.port);
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    await pollDevice(gladys, config, devices[0]);
+
+    // Gladys cannot poll slower than once a minute, so the configured interval
+    // (300 s by default) is enforced here: the next four ticks must not touch
+    // Proxmox at all, and must not overwrite the states already published.
+    const readsBefore = server.requests.length;
+    gladys.published.length = 0;
+    await pollDevice(gladys, config, devices[0]);
+
+    assert.equal(server.requests.length, readsBefore, 'Proxmox must not be read again');
+    assert.equal(gladys.published.length, 0, 'the last known state stays untouched');
   } finally {
     await server.close();
   }
