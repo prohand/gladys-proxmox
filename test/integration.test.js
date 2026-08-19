@@ -370,7 +370,9 @@ test('polling a node publishes the last backup, its duration and its status', as
     assert.equal(lastBackup.state, undefined);
 
     assert.equal(status.device_feature_external_id, 'ext:proxmox:proxmox-node:pve1:backup-status');
-    assert.equal(status.state, 1);
+    // What Proxmox itself said, as text: a switch could only have said "on".
+    assert.equal(status.text, 'OK');
+    assert.equal(status.state, undefined);
 
     assert.equal(
       duration.device_feature_external_id,
@@ -425,7 +427,7 @@ test('a poll arriving before the configured interval reads nothing', async () =>
   }
 });
 
-test('a node with no backup publishes "unknown" and leaves the rest unknown', async () => {
+test('a node with no backup publishes "unknown" and leaves the duration unknown', async () => {
   const server = await startCluster();
   const gladys = createFakeGladys();
   const config = configFor(server.port);
@@ -433,18 +435,25 @@ test('a node with no backup publishes "unknown" and leaves the rest unknown', as
     const { devices } = await discoverDevices(gladys, config);
     await pollDevice(gladys, config, devices[1]);
 
-    assert.equal(gladys.published.length, 1, 'no fake 0 s duration, no fake OFF status');
-    assert.equal(
-      gladys.published[0].device_feature_external_id,
-      'ext:proxmox:proxmox-node:pve2:last-backup',
-    );
-    assert.equal(gladys.published[0].text, 'unknown');
+    // Both text features say "unknown"; the duration publishes nothing at all,
+    // because a numeric feature cannot say it and 0 s would be a lie.
+    assert.equal(gladys.published.length, 2, 'no fake 0 s duration');
+    assert.deepEqual(gladys.published, [
+      {
+        device_feature_external_id: 'ext:proxmox:proxmox-node:pve2:last-backup',
+        text: 'unknown',
+      },
+      {
+        device_feature_external_id: 'ext:proxmox:proxmox-node:pve2:backup-status',
+        text: 'unknown',
+      },
+    ]);
   } finally {
     await server.close();
   }
 });
 
-test('a failed backup turns the node status feature off', async () => {
+test('a failed backup publishes the Proxmox error as the node status', async () => {
   const server = await startCluster({ '/nodes/pve1/tasks': taskRoute([TASKS[2]]) });
   const gladys = createFakeGladys();
   const config = configFor(server.port);
@@ -454,13 +463,15 @@ test('a failed backup turns the node status feature off', async () => {
     const status = gladys.published.find((state) =>
       state.device_feature_external_id.endsWith(':backup-status'),
     );
-    assert.equal(status.state, 0);
+    // The reason, not just "not on": this is the whole point of the text
+    // feature — the user reads why the backup failed without opening Proxmox.
+    assert.equal(status.text, "failed — command 'lvcreate' failed: exit code 5");
   } finally {
     await server.close();
   }
 });
 
-test('polling a guest publishes 1 when it runs, 0 otherwise', async () => {
+test('polling a guest publishes the Proxmox state word', async () => {
   const server = await startCluster();
   const gladys = createFakeGladys();
   const config = configFor(server.port);
@@ -471,13 +482,13 @@ test('polling a guest publishes 1 when it runs, 0 otherwise', async () => {
     await pollDevice(gladys, config, running);
     assert.deepEqual(gladys.published.at(-1), {
       device_feature_external_id: 'ext:proxmox:proxmox-guest:qemu-101:status',
-      state: 1,
+      text: 'running',
     });
 
     await pollDevice(gladys, config, stopped);
     assert.deepEqual(gladys.published.at(-1), {
       device_feature_external_id: 'ext:proxmox:proxmox-guest:lxc-200:status',
-      state: 0,
+      text: 'stopped',
     });
   } finally {
     await server.close();
@@ -664,7 +675,10 @@ test('a device of the second server is polled against the second server', async 
     gladys.published.length = 0;
     await pollDevice(gladys, config, { external_id: 'ext:proxmox:proxmox-guest:2@qemu-101' });
     assert.deepEqual(gladys.published, [
-      { device_feature_external_id: 'ext:proxmox:proxmox-guest:2@qemu-101:status', state: 0 },
+      {
+        device_feature_external_id: 'ext:proxmox:proxmox-guest:2@qemu-101:status',
+        text: 'stopped',
+      },
     ]);
   } finally {
     await first.close();

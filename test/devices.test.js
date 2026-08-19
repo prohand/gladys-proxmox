@@ -69,16 +69,33 @@ test('a node device carries the three read-only backup features', () => {
   assert.equal(duration.min, 0);
   assert.equal(duration.keep_history, true);
 
+  // Text, not a binary switch: Proxmox answers "OK", "WARNINGS: 2" or a whole
+  // error line, and none of those fits in an on/off state.
   assert.equal(status.name, 'Backup status');
   assert.equal(status.external_id, `ext:proxmox:proxmox-node:pve1:${FEATURE.BACKUP_STATUS}`);
-  assert.equal(status.category, DEVICE_FEATURE_CATEGORIES.SWITCH);
-  assert.equal(status.type, DEVICE_FEATURE_TYPES.SWITCH.BINARY);
-  assert.equal(status.min, 0);
-  assert.equal(status.max, 1);
-  assert.equal(status.keep_history, true);
+  assert.equal(status.category, DEVICE_FEATURE_CATEGORIES.TEXT);
+  assert.equal(status.type, DEVICE_FEATURE_TYPES.TEXT.TEXT);
+  assert.equal(status.keep_history, false);
+  assert.equal(status.read_only, true);
 });
 
-test('a guest device carries a single binary status feature', () => {
+test('every feature declares the min and max Gladys stores as NOT NULL', () => {
+  const gladys = createFakeGladys();
+  // Gladys answers `HTTP 422 — t_device_feature.min cannot be null` to a
+  // feature that omits them, and — like an invalid poll frequency — ONE refused
+  // feature rejects the whole publish, so not a single device is registered.
+  const features = [
+    ...buildNodeDevice(gladys, server, 'pve1').features,
+    ...buildGuestDevice(gladys, server, GUEST).features,
+  ];
+  assert.ok(features.length > 0);
+  for (const feature of features) {
+    assert.ok(Number.isFinite(feature.min), `${feature.external_id} has no min`);
+    assert.ok(Number.isFinite(feature.max), `${feature.external_id} has no max`);
+  }
+});
+
+test('a guest device carries a single read-only text status feature', () => {
   const gladys = createFakeGladys();
   const device = buildGuestDevice(gladys, server, GUEST);
 
@@ -90,10 +107,11 @@ test('a guest device carries a single binary status feature', () => {
   const [status] = device.features;
   assert.equal(status.name, 'Status');
   assert.equal(status.external_id, `ext:proxmox:proxmox-guest:qemu-101:${GUEST_FEATURE.STATUS}`);
-  assert.equal(status.category, DEVICE_FEATURE_CATEGORIES.SWITCH);
-  assert.equal(status.type, DEVICE_FEATURE_TYPES.SWITCH.BINARY);
-  assert.equal(status.min, 0);
-  assert.equal(status.max, 1);
+  // Proxmox has more than two states (`paused`, `suspended`...): a binary
+  // feature would flatten them all into "not on".
+  assert.equal(status.category, DEVICE_FEATURE_CATEGORIES.TEXT);
+  assert.equal(status.type, DEVICE_FEATURE_TYPES.TEXT.TEXT);
+  assert.equal(status.read_only, true);
 });
 
 test('a guest with no name still gets a distinguishable device name', () => {

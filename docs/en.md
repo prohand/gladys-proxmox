@@ -18,24 +18,37 @@ After installation, one Gladys device appears per Proxmox node, named
 | ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | **Last backup**     | Text           | When the last backup started, in your time zone — e.g. `2026-08-19 02:00:00 (Europe/Paris)`. Holds `unknown` when the node has no backup. |
 | **Backup duration** | Integer sensor | How long that backup ran, in seconds. Kept in history, so you can chart it and trigger scenes on it.                                      |
-| **Backup status**   | Binary sensor  | **On** when that backup succeeded, **off** for any other state.                                                                           |
+| **Backup status**   | Text           | `OK`, or `failed — ` followed by what Proxmox said — e.g. `failed — command 'lvcreate' failed: exit code 5`.                              |
 
 And one Gladys device per virtual machine and per LXC container, named
 `Proxmox <name> (<vmid>)`:
 
-| Feature    | Type          | What it holds                                                    |
-| ---------- | ------------- | ---------------------------------------------------------------- |
-| **Status** | Binary sensor | **On** when the guest is `running`, **off** for any other state. |
+| Feature    | Type | What it holds                                                                     |
+| ---------- | ---- | --------------------------------------------------------------------------------- |
+| **Status** | Text | The Proxmox state word, as it comes: `running`, `stopped`, `paused`, `suspended`… |
+
+**Why text and not on/off sensors?** Proxmox answers with a word or with a whole
+error line, and a binary feature can only say "not on": a paused VM read exactly
+like a stopped one, and a failed backup told you nothing about _why_ — you had
+to open the Proxmox task log to find the full datastore. The text features carry
+the answer itself. A switch is also the shape Gladys draws for an actuator,
+which these read-only readings never are.
+
+Whether a backup counts as a success is still yours to set: with the default
+_OK only_, a run that ended in `WARNINGS: 2` publishes `failed — WARNINGS: 2`;
+switch _What counts as a successful backup_ to _OK and warnings_ and the same
+run publishes `OK`.
 
 A node with no backup inside the observation window publishes `unknown` on
-**Last backup**, and leaves **Backup duration** and **Backup status** unknown
+**Last backup** and on **Backup status**, and leaves **Backup duration** unknown
 rather than showing a `0 s` backup that never happened. Templates never become
 devices, and a guest that disappears (deleted, or no longer visible to the
-token) keeps its last known state instead of being turned off.
+token) keeps its last known state instead of being shown as stopped.
 
-Because the duration and both binary features keep history, the natural Gladys
-usage is a scene triggered on them: _when "Backup status" on pve1 becomes off,
-notify me_, or _when "Status" of my NAS VM becomes off, notify me_.
+The natural Gladys usage is a scene triggered on those texts: _when "Backup
+status" on pve1 is not "OK", notify me_, or _when "Status" of my NAS VM is not
+"running", notify me_. **Backup duration** is the historized one, so it is the
+one you can chart.
 
 ### Two Proxmox servers
 
@@ -241,14 +254,15 @@ container trusts. You have three options, best first:
 
 ### What counts as a successful backup
 
-Proxmox records a finished backup with one of these statuses:
+Proxmox records a finished backup with one of these statuses, and **Backup
+status** publishes:
 
-| Proxmox status | Meaning                         | "OK only" (default) | "OK and warnings" |
-| -------------- | ------------------------------- | ------------------- | ----------------- |
-| `OK`           | success                         | **on**              | **on**            |
-| `WARNINGS: 3`  | finished, with warnings         | off                 | **on**            |
-| anything else  | error string                    | off                 | off               |
-| _(empty)_      | no exit status — worker crashed | off                 | off               |
+| Proxmox status | Meaning                         | "OK only" (default)                         | "OK and warnings"                           |
+| -------------- | ------------------------------- | ------------------------------------------- | ------------------------------------------- |
+| `OK`           | success                         | `OK`                                        | `OK`                                        |
+| `WARNINGS: 3`  | finished, with warnings         | `failed — WARNINGS: 3`                      | `OK`                                        |
+| anything else  | error string                    | `failed — <the error>`                      | `failed — <the error>`                      |
+| _(empty)_      | no exit status — worker crashed | `failed — no exit status (worker crashed?)` | `failed — no exit status (worker crashed?)` |
 
 A backup that completed but skipped a guest ends in `WARNINGS: n`. Choose
 _OK and warnings_ if you consider those good enough.
@@ -290,10 +304,11 @@ window shorter than your backup schedule: a node backed up every two weeks
 reports nothing with the default 7-day window. Raise _How far back to look for
 a backup_.
 
-**"Backup status" is off while the backup looks fine** — the backup probably
-ended in `WARNINGS: n` (a guest was skipped, a hook returned non-zero…). Open
-the task in the Proxmox UI to see why, or switch _What counts as a successful
-backup_ to _OK and warnings_.
+**"Backup status" reads `failed — WARNINGS: 2` while the backup looks fine** —
+the backup ended with warnings (a guest was skipped, a hook returned non-zero…).
+The text after `failed — ` is Proxmox's own words: open that task in the Proxmox
+UI to see why, or switch _What counts as a successful backup_ to _OK and
+warnings_, and such a run will read `OK`.
 
 **A VM I deleted is still listed** — the Gladys device stays until you delete
 it in Gladys; the integration stops publishing states for it, so it simply

@@ -2,8 +2,13 @@
 // Device type: PROXMOX GUEST (a QEMU virtual machine or an LXC container)
 //
 // One Gladys device per guest, carrying a single read-only feature:
-//   - Status : ON when the guest state is `running`, OFF for any other state
-//              (stopped, paused, suspended, unknown...).
+//   - Status : the state word Proxmox reports — `running`, `stopped`, `paused`,
+//              `suspended`... — published as it comes (text feature).
+//
+// Text rather than an on/off switch: Proxmox has more than two states, and a
+// binary feature flattened all of them into "not on", so a paused VM read
+// exactly like a stopped one. A switch also rendered as an actuator, which this
+// device never is.
 //
 // The platform id is the guest kind plus its VMID (`qemu-101`, `lxc-200`), not
 // the node it runs on: a VMID is unique cluster-wide and survives a migration,
@@ -13,14 +18,12 @@
 // never starts, stops nor migrates a guest.
 // -----------------------------------------------------------------------------
 
-import {
-  createLogger,
-  DEVICE_FEATURE_CATEGORIES,
-  DEVICE_FEATURE_TYPES,
-} from '@gladysassistant/integration-sdk';
+import { createLogger } from '@gladysassistant/integration-sdk';
 import { fetchGuest } from '../proxmox/guests.js';
 import { scopeId } from '../servers.js';
 import { devicePollFrequency } from '../poll.js';
+import { formatGuestStatus } from '../format.js';
+import { textFeature } from './features.js';
 
 export const DEVICE_TYPE = 'proxmox-guest';
 
@@ -72,19 +75,7 @@ export function buildGuestDevice(gladys, server, guest) {
     // One of the frequencies Gladys accepts (milliseconds); the configured
     // interval is enforced by `claimPoll()`. See `src/poll.js`.
     poll_frequency: devicePollFrequency(server.poll_frequency),
-    features: [
-      {
-        name: 'Status',
-        external_id: ids.feature(FEATURE.STATUS),
-        category: DEVICE_FEATURE_CATEGORIES.SWITCH,
-        type: DEVICE_FEATURE_TYPES.SWITCH.BINARY,
-        min: 0,
-        max: 1,
-        read_only: true,
-        has_feedback: false,
-        keep_history: true,
-      },
-    ],
+    features: [textFeature('Status', ids.feature(FEATURE.STATUS))],
   };
 }
 
@@ -93,7 +84,7 @@ export function buildGuestDevice(gladys, server, guest) {
  *
  * A guest that has disappeared (deleted, or no longer visible to the token)
  * publishes nothing: its last known state stays on screen rather than being
- * turned into a fake OFF.
+ * turned into a `stopped` that Proxmox never reported.
  * @param {object} gladys - The SDK instance.
  * @param {object} server - The server the guest belongs to.
  * @param {string} key - The guest key (`qemu-101`, `lxc-200`).
@@ -113,7 +104,7 @@ export async function pollGuest(gladys, server, key) {
   await gladys.publishStates([
     {
       device_feature_external_id: guestExternalIds(gladys, server, key).feature(FEATURE.STATUS),
-      state: guest.running ? 1 : 0,
+      text: formatGuestStatus(guest),
     },
   ]);
 
