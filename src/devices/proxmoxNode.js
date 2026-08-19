@@ -27,6 +27,7 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 import { fetchLastBackup } from '../proxmox/backups.js';
+import { devicePollFrequency } from '../poll.js';
 import { scopeId } from '../servers.js';
 import { formatBackupSummary, formatLastBackup, resolveTimezone } from '../format.js';
 
@@ -75,8 +76,10 @@ export function buildNodeDevice(gladys, server, node) {
     // configured, two nodes called `pve` must not both show up as "Proxmox pve".
     name: `${server.label} ${node}`,
     external_id: ids.device,
-    // Gladys calls onPoll at this interval (seconds).
-    poll_frequency: server.poll_frequency,
+    // Gladys only accepts a fixed set of frequencies, in milliseconds, the
+    // slowest being one minute: the configured interval is enforced by
+    // `claimPoll()` instead. See `src/poll.js`.
+    poll_frequency: devicePollFrequency(server.poll_frequency),
     features: [
       {
         name: 'Last backup',

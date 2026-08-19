@@ -118,6 +118,7 @@ dependencies** beyond the SDK.
 │  │  ├─ proxmoxNode.js              #   the node device: its three backup features, and its poll
 │  │  └─ proxmoxGuest.js             #   the guest device: its status feature, and its poll
 │  ├─ actions.js                     # the Configuration screen buttons
+│  ├─ poll.js                        # the frequencies Gladys accepts, and the real interval
 │  ├─ format.js                      # timestamps in the user's time zone, durations, summaries
 │  ├─ servers.js                     # the flat form -> the list of Proxmox servers, and id scoping
 │  └─ config.js                      # config defaults, normalization, bounds
@@ -152,7 +153,12 @@ Shared by every configured server:
 | `backup_lookback_days` | number | `7`       | How far back the last backup is looked for                |
 | `backup_success_scope` | select | `ok_only` | Whether `WARNINGS: n` still counts as a successful backup |
 | `timezone`             | string | host      | IANA zone for the rendered timestamp                      |
-| `poll_frequency`       | number | `300`     | Refresh interval, seconds                                 |
+| `poll_frequency`       | number | `300`     | Refresh interval, seconds (60-3600)                       |
+
+Gladys only accepts six device poll frequencies, the slowest being one minute,
+so the devices declare that one and `src/poll.js` enforces the configured
+interval itself: a poll arriving early is skipped and publishes nothing, which
+leaves the last known state alone.
 
 A server exists as soon as its host and both token fields are filled in. The
 first server's Gladys external ids are unscoped (`…:proxmox-node:pve1`), the

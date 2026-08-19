@@ -15,6 +15,7 @@ import {
   guestDeviceName,
 } from '../src/devices/proxmoxGuest.js';
 import { describeDevice } from '../src/devices/index.js';
+import { GLADYS_POLL_FREQUENCIES } from '../src/poll.js';
 
 const CONFIG = normalizeConfig({
   host: 'pve.lan',
@@ -44,7 +45,10 @@ test('a node device carries the three read-only backup features', () => {
 
   assert.equal(device.name, 'Proxmox pve1');
   assert.equal(device.external_id, 'ext:proxmox:proxmox-node:pve1');
-  assert.equal(device.poll_frequency, 600);
+  // Not the configured 600 s: Gladys only accepts a fixed set of frequencies
+  // in milliseconds, and rejects the whole publish otherwise.
+  assert.equal(device.poll_frequency, 60000);
+  assert.ok(GLADYS_POLL_FREQUENCIES.includes(device.poll_frequency));
   assert.equal(device.features.length, 3);
 
   const [lastBackup, duration, status] = device.features;
@@ -80,7 +84,7 @@ test('a guest device carries a single binary status feature', () => {
 
   assert.equal(device.name, 'Proxmox nextcloud (101)');
   assert.equal(device.external_id, 'ext:proxmox:proxmox-guest:qemu-101');
-  assert.equal(device.poll_frequency, 600);
+  assert.equal(device.poll_frequency, 60000);
   assert.equal(device.features.length, 1);
 
   const [status] = device.features;

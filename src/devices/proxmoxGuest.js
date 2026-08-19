@@ -20,6 +20,7 @@ import {
 } from '@gladysassistant/integration-sdk';
 import { fetchGuest } from '../proxmox/guests.js';
 import { scopeId } from '../servers.js';
+import { devicePollFrequency } from '../poll.js';
 
 export const DEVICE_TYPE = 'proxmox-guest';
 
@@ -68,7 +69,9 @@ export function buildGuestDevice(gladys, server, guest) {
   return {
     name: guestDeviceName(server, guest),
     external_id: ids.device,
-    poll_frequency: server.poll_frequency,
+    // One of the frequencies Gladys accepts (milliseconds); the configured
+    // interval is enforced by `claimPoll()`. See `src/poll.js`.
+    poll_frequency: devicePollFrequency(server.poll_frequency),
     features: [
       {
         name: 'Status',

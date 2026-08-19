@@ -81,6 +81,13 @@ Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
   `probeNodeAudit()` (`GET /nodes/{node}/status`, which does return `403`)
   exists and why `test_connection` reports visible guest counts rather than just
   "OK".
+- **`poll_frequency` is a Gladys enum, in milliseconds.** A discovered device may
+  only carry 1 s / 2 s / 10 s / 15 s / 30 s / 60 s (`DEVICE_POLL_FREQUENCIES` in
+  the core); anything else makes `setDiscoveredDevices` reject the WHOLE publish
+  with `devices[0].poll_frequency: invalid poll frequency`. The configured
+  interval is in seconds and goes up to an hour, so `src/poll.js` declares the
+  slowest accepted value and enforces the real interval itself (`claimPoll()`);
+  an early poll publishes nothing rather than a stale re-read.
 - **Guest ids are `<kind>-<vmid>`**, never node-based: the VMID is cluster-wide
   and survives a migration.
 - **The first server's external ids stay unscoped.** `scopeId()` prefixes only
