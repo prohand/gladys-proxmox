@@ -14,7 +14,7 @@ import { createLogger } from '@gladysassistant/integration-sdk';
 import { listNodes } from '../proxmox/nodes.js';
 import { clearGuestsCache, fetchGuests, parseGuestKey } from '../proxmox/guests.js';
 import { listServers, parseScopedId, serverById } from '../servers.js';
-import { claimPoll, resetPollThrottle } from '../poll.js';
+import { claimPoll, markPolled, resetPollThrottle } from '../poll.js';
 import {
   buildNodeDevice,
   DEVICE_TYPE as NODE_DEVICE_TYPE,
@@ -181,9 +181,12 @@ export function monitoredGuests(serverId) {
  * @param {object} gladys - The SDK instance.
  * @param {object} config - Normalized configuration.
  * @param {object} device - The device Gladys asked to refresh.
+ * @param {object} [options] - Reading options.
+ * @param {boolean} [options.force] - Read now, whatever the interval says
+ *   (a device the user has just added has no state at all yet).
  * @returns {Promise<void>} Resolves once the states are published.
  */
-export async function pollDevice(gladys, config, device) {
+export async function pollDevice(gladys, config, device, { force = false } = {}) {
   const descriptor = describeDevice(gladys, device);
   if (!descriptor) {
     logger.warn(`onPoll ignored: unknown device ${device?.external_id}`);
@@ -204,7 +207,11 @@ export async function pollDevice(gladys, config, device) {
   // `src/poll.js`); the configured refresh interval is enforced here. A poll
   // that arrives too early publishes nothing at all, which leaves the last
   // known state on screen — it does not overwrite it with anything.
-  if (!claimPoll(device.external_id, server.poll_frequency)) {
+  if (force) {
+    // The read happens whatever the interval says, but it still counts as one:
+    // the next scheduled poll is measured from here.
+    markPolled(device.external_id);
+  } else if (!claimPoll(device.external_id, server.poll_frequency)) {
     logger.debug(
       `onPoll skipped: ${device.external_id} was refreshed less than ` +
         `${server.poll_frequency}s ago.`,
@@ -238,6 +245,9 @@ export async function pollAllDevices(gladys, config) {
   for (const server of listServers(config)) {
     for (const node of monitoredNodes(server.id)) {
       try {
+        // An explicit refresh counts as a read: the next scheduled poll is
+        // measured from here, not from the previous tick.
+        markPolled(nodeExternalIds(gladys, server, node).device);
         results.push({ kind: 'node', server, node, backup: await pollNode(gladys, server, node) });
       } catch (error) {
         logger.error(`Polling node ${node} of ${server.label} failed`, error);
@@ -246,6 +256,7 @@ export async function pollAllDevices(gladys, config) {
     }
     for (const key of monitoredGuests(server.id)) {
       try {
+        markPolled(guestExternalIds(gladys, server, key).device);
         results.push({ kind: 'guest', server, key, guest: await pollGuest(gladys, server, key) });
       } catch (error) {
         logger.error(`Polling guest ${key} of ${server.label} failed`, error);

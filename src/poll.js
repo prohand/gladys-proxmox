@@ -79,6 +79,21 @@ export function claimPoll(externalId, intervalSeconds, now = Date.now()) {
 }
 
 /**
+ * Record a read that did NOT go through `claimPoll()` — an immediate refresh.
+ *
+ * A device the user has just added is read right away (`onDeviceCreated`), and
+ * so is a device refreshed by hand: the next scheduled poll must then be
+ * measured from that read, not from the previous one, otherwise the forced read
+ * is followed a minute later by a second one.
+ * @param {string} externalId - The Gladys device external id.
+ * @param {number} [now] - Current time, injectable for the tests.
+ * @returns {void}
+ */
+export function markPolled(externalId, now = Date.now()) {
+  lastPolledAt.set(externalId, now);
+}
+
+/**
  * Forget every recorded poll, so the next one of each device happens at once.
  *
  * Called on discovery: a re-discovery follows a (re)connection or a

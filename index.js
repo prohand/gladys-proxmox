@@ -53,6 +53,19 @@ gladys.onPoll(async (device) => {
   await pollDevice(gladys, config, device);
 });
 
+// --- Device added by the user from the Discovery tab -------------------------
+// A discovered device carries no state: Gladys creates it empty and only polls
+// it on its next tick, so the user who has just added a node saw an empty
+// "Last backup" until then. Read it right away instead — this is the same read
+// `onPoll` does, only not waiting for the schedule.
+gladys.onDeviceCreated(async (device) => {
+  if (!hasConfiguredServer(config)) {
+    return;
+  }
+  logger.info(`onDeviceCreated -> first read of ${device?.external_id}`);
+  await pollDevice(gladys, config, device, { force: true });
+});
+
 // --- Manifest actions: buttons in the Configuration screen -------------------
 gladys.onAction('test_connection', () => testConnection(config));
 gladys.onAction('refresh_now', () => refreshNow(gladys, config));

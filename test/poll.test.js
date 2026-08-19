@@ -4,6 +4,7 @@ import {
   claimPoll,
   devicePollFrequency,
   GLADYS_POLL_FREQUENCIES,
+  markPolled,
   resetPollThrottle,
 } from '../src/poll.js';
 
@@ -75,4 +76,13 @@ test('a discovery clears the schedule so the next poll reads at once', () => {
   assert.equal(claimPoll('ext:proxmox:proxmox-node:pve1', 300, 0), true);
   resetPollThrottle();
   assert.equal(claimPoll('ext:proxmox:proxmox-node:pve1', 300, 1000), true);
+});
+
+test('a forced read counts as a read: the schedule restarts from it', () => {
+  const id = 'ext:proxmox:proxmox-node:pve1';
+  // The user has just added the device (or pressed "Refresh now"): it was read
+  // outside the schedule, so the next tick must not read it a second time.
+  markPolled(id, 0);
+  assert.equal(claimPoll(id, 300, 60_000), false);
+  assert.equal(claimPoll(id, 300, 300_000), true);
 });
