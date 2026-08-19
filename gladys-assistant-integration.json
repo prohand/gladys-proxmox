@@ -6,12 +6,17 @@
     "en": "Proxmox VE backup monitoring: last backup, duration and status per node, plus the running state of every VM and LXC.",
     "fr": "Surveillance des sauvegardes Proxmox VE : dernière sauvegarde, durée et statut par nœud, plus l'état de marche de chaque VM et LXC."
   },
-  "version": "2.0.0",
-  "docker_image": "ghcr.io/prohand/gladys-proxmox:2.0.0",
+  "version": "2.0.1",
+  "docker_image": "ghcr.io/prohand/gladys-proxmox:2.0.1",
   "gladys_version": ">=4.86.0",
   "cover_image": "https://raw.githubusercontent.com/prohand/gladys-proxmox/main/cover.png",
-  "categories": ["network", "services"],
-  "transports": ["local"],
+  "categories": [
+    "network",
+    "services"
+  ],
+  "transports": [
+    "local"
+  ],
   "config_schema": [
     {
       "key": "intro",
