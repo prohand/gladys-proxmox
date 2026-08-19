@@ -100,6 +100,55 @@ function normalizeString(raw, key) {
 }
 
 /**
+ * Split a host field into the host name and, when it carries one, its port.
+ *
+ * The field asks for "an IP address or a host name", but the address a user has
+ * in front of them is the one in their browser: `https://pve.lan:8006/`. Passed
+ * verbatim to the HTTPS client that string is looked up as a DNS name, which
+ * fails with `EAI_AGAIN`/`ENOTFOUND` and reads like a network outage. So accept
+ * what people actually paste: strip the scheme, any credentials, the path, and
+ * keep the port written in the address — it is more specific than the port
+ * field, so it wins over it.
+ * @param {unknown} value - Raw host field.
+ * @returns {{host: string, port: number|null}} The host, and the port it carried.
+ */
+export function parseHost(value) {
+  let text = String(value ?? '').trim();
+  // Scheme (`https://`, `http://`) and protocol-relative forms.
+  text = text.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^\/\//, '');
+  // Path, query string and fragment: `pve.lan:8006/#v1:0:18` is a copied URL.
+  text = text.split(/[/?#]/)[0];
+  // Credentials, on the off chance the URL carried some.
+  const at = text.lastIndexOf('@');
+  if (at !== -1) {
+    text = text.slice(at + 1);
+  }
+
+  let port = null;
+  const bracketed = /^\[([^\]]*)\](?::(\d+))?$/.exec(text);
+  if (bracketed) {
+    // Bracketed IPv6 literal, with or without a port.
+    text = bracketed[1];
+    port = bracketed[2] === undefined ? null : Number(bracketed[2]);
+  } else {
+    const withPort = /^([^:]+):(\d*)$/.exec(text);
+    if (withPort) {
+      // A single colon separates a host from a port; several mean a bare IPv6
+      // literal, which carries no port at all.
+      text = withPort[1];
+      port = withPort[2] === '' ? null : Number(withPort[2]);
+    }
+  }
+
+  // An out-of-range port is not a port: fall back to the port field rather
+  // than clamping a typo into a plausible-looking value.
+  if (port !== null && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+    port = null;
+  }
+  return { host: text.trim(), port };
+}
+
+/**
  * Split a comma-separated field into a list of trimmed, non-empty entries.
  * @param {unknown} value - Raw field value.
  * @returns {string[]} The entries, empty when the field is left blank.
@@ -122,10 +171,11 @@ export function splitList(value) {
  */
 function normalizeServerFields(raw, suffix) {
   const key = (name) => `${name}${suffix}`;
+  const { host, port } = parseHost(normalizeString(raw, key('host')));
   return {
     [key('label')]: normalizeString(raw, key('label')),
-    [key('host')]: normalizeString(raw, key('host')),
-    [key('port')]: normalizeNumber(raw[key('port')], key('port')),
+    [key('host')]: host,
+    [key('port')]: port ?? normalizeNumber(raw[key('port')], key('port')),
     [key('token_id')]: normalizeString(raw, key('token_id')),
     [key('token_secret')]: normalizeString(raw, key('token_secret')),
     [key('tls_fingerprint')]: normalizeString(raw, key('tls_fingerprint')),

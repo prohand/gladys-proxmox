@@ -57,9 +57,11 @@ export function describeError(error) {
         fr: "Proxmox n'a pas répondu à temps. Vérifiez l'hôte, le port et le réseau.",
       };
     case 'network':
+      // The client already names the host, the port and the fix: prefixing it
+      // with "Cannot reach Proxmox" would only say it twice.
       return {
-        en: `Cannot reach Proxmox: ${error.message}`,
-        fr: `Proxmox est injoignable : ${error.message}`,
+        en: error.message,
+        fr: `Proxmox : ${error.message}`,
       };
     default:
       return {

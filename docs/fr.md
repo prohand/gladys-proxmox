@@ -183,20 +183,27 @@ curl -sS --insecure \
 
 ## Configuration
 
-| Champ                                          | Requis | Défaut  | Remarques                                                                                                       |
-| ---------------------------------------------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------- |
-| **Nom de ce Proxmox**                          | non    | Proxmox | Préfixe le nom de chaque appareil de ce serveur. Le second bloc utilise `Proxmox 2` par défaut.                 |
-| **Hôte Proxmox**                               | oui    | —       | IP ou nom d'hôte de n'importe quel nœud — un nœud répond pour tout le cluster.                                  |
-| **Port de l'API**                              | non    | `8006`  | Le port de l'API Proxmox VE.                                                                                    |
-| **Identifiant du jeton d'API**                 | oui    | —       | La forme complète `utilisateur@realm!nomdujeton`, ex. `gladys@pve!tasks`.                                       |
-| **Secret du jeton d'API**                      | oui    | —       | La valeur affichée une seule fois par Proxmox. Stockée chiffrée par Gladys, jamais renvoyée à votre navigateur. |
-| **Empreinte du certificat TLS**                | non    | vide    | Empreinte SHA-256 du certificat du nœud. Voir plus bas.                                                         |
-| **Vérifier le certificat TLS**                 | non    | activé  | À laisser activé. Voir plus bas.                                                                                |
-| **Nœuds à surveiller**                         | non    | tous    | Noms séparés par des virgules, ex. `pve1, pve2`. Filtre aussi les VM/LXC remontées.                             |
-| **Ancienneté maximale d'une sauvegarde**       | non    | `7` j   | La dernière sauvegarde est recherchée dans cette fenêtre.                                                       |
-| **Ce qui compte comme une sauvegarde réussie** | non    | OK seul | Si une sauvegarde terminée en `WARNINGS: n` compte quand même comme réussie.                                    |
-| **Fuseau horaire**                             | non    | hôte    | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                       |
-| **Intervalle de rafraîchissement**             | non    | `300` s | Fréquence de lecture de Proxmox.                                                                                |
+| Champ                                          | Requis | Défaut  | Remarques                                                                                                                        |
+| ---------------------------------------------- | ------ | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Nom de ce Proxmox**                          | non    | Proxmox | Préfixe le nom de chaque appareil de ce serveur. Le second bloc utilise `Proxmox 2` par défaut.                                  |
+| **Hôte Proxmox**                               | oui    | —       | IP ou nom d'hôte de n'importe quel nœud — un nœud répond pour tout le cluster. Une URL collée fonctionne aussi, voir ci-dessous. |
+| **Port de l'API**                              | non    | `8006`  | Le port de l'API Proxmox VE.                                                                                                     |
+| **Identifiant du jeton d'API**                 | oui    | —       | La forme complète `utilisateur@realm!nomdujeton`, ex. `gladys@pve!tasks`.                                                        |
+| **Secret du jeton d'API**                      | oui    | —       | La valeur affichée une seule fois par Proxmox. Stockée chiffrée par Gladys, jamais renvoyée à votre navigateur.                  |
+| **Empreinte du certificat TLS**                | non    | vide    | Empreinte SHA-256 du certificat du nœud. Voir plus bas.                                                                          |
+| **Vérifier le certificat TLS**                 | non    | activé  | À laisser activé. Voir plus bas.                                                                                                 |
+| **Nœuds à surveiller**                         | non    | tous    | Noms séparés par des virgules, ex. `pve1, pve2`. Filtre aussi les VM/LXC remontées.                                              |
+| **Ancienneté maximale d'une sauvegarde**       | non    | `7` j   | La dernière sauvegarde est recherchée dans cette fenêtre.                                                                        |
+| **Ce qui compte comme une sauvegarde réussie** | non    | OK seul | Si une sauvegarde terminée en `WARNINGS: n` compte quand même comme réussie.                                                     |
+| **Fuseau horaire**                             | non    | hôte    | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                                        |
+| **Intervalle de rafraîchissement**             | non    | `300` s | Fréquence de lecture de Proxmox.                                                                                                 |
+
+_Hôte Proxmox_ attend un nom d'hôte ou une adresse IP, mais l'adresse que vous
+avez sous les yeux est celle de votre navigateur : une URL collée est donc
+acceptée aussi. `https://pve.lan:8006/#v1:0:18` est lu comme l'hôte `pve.lan`
+sur le port `8006` ; le schéma, le chemin et d'éventuels identifiants sont
+retirés, et le port écrit dans l'adresse l'emporte sur le champ _Port de
+l'API_.
 
 Les six premiers champs existent **deux fois** : une fois pour le premier
 Proxmox, une fois pour le second (optionnel). Seuls l'hôte et le jeton du
@@ -302,6 +309,15 @@ le supprimez pas dans Gladys ; l'intégration cesse simplement de publier des
 
 **« Proxmox presents a self-signed certificate »** — épinglez son empreinte,
 voir la section TLS ci-dessus.
+
+**« Cannot resolve the host name … »** — le nom saisi dans _Hôte Proxmox_ n'a
+pas pu être résolu (`EAI_AGAIN`, `ENOTFOUND`). Vérifiez son orthographe, et que
+la machine qui exécute l'intégration sait le résoudre — un nom court
+`.local`/LAN ne se résout souvent que sur le réseau dont il vient, là où
+l'adresse IP fonctionne toujours.
+
+**« … refused the connection »** — l'hôte répond mais rien n'écoute sur ce
+port : vérifiez le _Port de l'API_ (`8006` par défaut).
 
 **« Cannot reach … »** — vérifiez l'hôte et le port (`8006`), et que le
 conteneur Gladys peut joindre le nœud sur votre réseau. Avec deux serveurs
