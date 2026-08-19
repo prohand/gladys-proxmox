@@ -6,12 +6,17 @@
     "en": "Proxmox VE backups per node (last run, duration, status) and the state of every VM and LXC.",
     "fr": "Sauvegardes Proxmox VE par nœud (dernière, durée, statut) et état de chaque VM et LXC."
   },
-  "version": "1.0.1",
-  "docker_image": "ghcr.io/prohand/gladys-proxmox:1.0.1",
+  "version": "1.0.2",
+  "docker_image": "ghcr.io/prohand/gladys-proxmox:1.0.2",
   "gladys_version": ">=4.86.0",
   "cover_image": "https://raw.githubusercontent.com/prohand/gladys-proxmox/main/cover.png",
-  "categories": ["network", "services"],
-  "transports": ["local"],
+  "categories": [
+    "network",
+    "services"
+  ],
+  "transports": [
+    "local"
+  ],
   "config_schema": [
     {
       "key": "intro",
