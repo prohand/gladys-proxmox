@@ -664,7 +664,8 @@ test('an unreachable second server does not hide the first', async () => {
     assert.equal(devices.length, 5, 'the first server is published as usual');
     assert.equal(failures.length, 1);
     assert.equal(failures[0].server.id, 2);
-    assert.match(failures[0].error.message, /Cannot reach/);
+    assert.equal(failures[0].error.kind, 'network');
+    assert.match(failures[0].error.message, /refused the connection/);
   } finally {
     await first.close();
   }

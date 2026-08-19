@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_CONFIG, isConfigured, normalizeConfig, splitList } from '../src/config.js';
+import {
+  DEFAULT_CONFIG,
+  isConfigured,
+  normalizeConfig,
+  parseHost,
+  splitList,
+} from '../src/config.js';
 
 test('normalizeConfig returns the defaults when called with no argument', () => {
   assert.deepEqual(normalizeConfig(), DEFAULT_CONFIG);
@@ -115,4 +121,49 @@ test('isConfigured requires the host and both token fields', () => {
     isConfigured(normalizeConfig({ host: 'pve.lan', token_id: 'a@pve!b', token_secret: 's' })),
     true,
   );
+});
+
+test('parseHost keeps a plain host or IP address untouched', () => {
+  assert.deepEqual(parseHost('pve.lan'), { host: 'pve.lan', port: null });
+  assert.deepEqual(parseHost('192.168.1.10'), { host: '192.168.1.10', port: null });
+  assert.deepEqual(parseHost('  pve.lan  '), { host: 'pve.lan', port: null });
+  assert.deepEqual(parseHost(undefined), { host: '', port: null });
+});
+
+test('parseHost strips what a copied URL carries around the host', () => {
+  assert.deepEqual(parseHost('https://pve.lan:8006'), { host: 'pve.lan', port: 8006 });
+  assert.deepEqual(parseHost('https://pve.lan:8006/'), { host: 'pve.lan', port: 8006 });
+  assert.deepEqual(parseHost('HTTPS://pve.lan/#v1:0:18'), { host: 'pve.lan', port: null });
+  assert.deepEqual(parseHost('http://192.168.1.10:8006/?console=kvm'), {
+    host: '192.168.1.10',
+    port: 8006,
+  });
+  assert.deepEqual(parseHost('//pve.lan:8006'), { host: 'pve.lan', port: 8006 });
+  assert.deepEqual(parseHost('root@pve.lan:8006'), { host: 'pve.lan', port: 8006 });
+});
+
+test('parseHost handles IPv6 literals', () => {
+  assert.deepEqual(parseHost('[2001:db8::1]:8006'), { host: '2001:db8::1', port: 8006 });
+  assert.deepEqual(parseHost('https://[2001:db8::1]/'), { host: '2001:db8::1', port: null });
+  // Unbracketed, the colons are the address itself: no port to read there.
+  assert.deepEqual(parseHost('2001:db8::1'), { host: '2001:db8::1', port: null });
+});
+
+test('parseHost ignores a port that is not one', () => {
+  assert.deepEqual(parseHost('pve.lan:'), { host: 'pve.lan', port: null });
+  assert.deepEqual(parseHost('pve.lan:99999'), { host: 'pve.lan', port: null });
+  assert.deepEqual(parseHost('pve.lan:0'), { host: 'pve.lan', port: null });
+});
+
+test('normalizeConfig accepts a URL pasted in the host field', () => {
+  const config = normalizeConfig({ host: 'https://pve.lan:8007/', host_2: 'https://pve2.lan/' });
+  assert.equal(config.host, 'pve.lan');
+  // The port written in the address is more specific than the port field.
+  assert.equal(config.port, 8007);
+  assert.equal(config.host_2, 'pve2.lan');
+  assert.equal(config.port_2, 8006);
+});
+
+test('normalizeConfig keeps the port field when the host carries none', () => {
+  assert.equal(normalizeConfig({ host: 'https://pve.lan/', port: 8123 }).port, 8123);
 });

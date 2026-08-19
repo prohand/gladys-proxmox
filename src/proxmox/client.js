@@ -120,6 +120,61 @@ function httpError(status, path, body) {
   });
 }
 
+// Node's DNS resolver codes: the name in the host field could not be looked up
+// at all, which is a configuration problem far more often than a network one.
+const DNS_ERROR_CODES = new Set(['EAI_AGAIN', 'ENOTFOUND', 'EAI_NODATA', 'EAI_NONAME']);
+// The host answered — or a router did — but nothing is listening there.
+const UNREACHABLE_ERROR_CODES = new Set([
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ETIMEDOUT',
+  'EHOSTDOWN',
+  'ENETDOWN',
+]);
+
+/**
+ * Turn a socket-level failure into the network error the user reads.
+ *
+ * The raw `EAI_AGAIN` of a mistyped host looks exactly like a DNS outage, so
+ * the three cases that have three different fixes are named apart: a name that
+ * does not resolve, a port that refuses the connection, and a host that cannot
+ * be reached at all.
+ * @param {object} server - A configured server.
+ * @param {string} path - API path that failed.
+ * @param {Error & {code?: string}} error - The socket error.
+ * @returns {ProxmoxError} The mapped error.
+ */
+export function networkError(server, path, error) {
+  const target = `${server.host}:${server.port}`;
+  const code = error.code ?? error.message;
+  if (DNS_ERROR_CODES.has(error.code)) {
+    return new ProxmoxError(
+      'network',
+      `Cannot resolve the host name "${server.host}" (${code}): the "Proxmox host" field takes ` +
+        'a host name or an IP address (pve.lan, 192.168.1.10), and the container running this ' +
+        'integration must be able to resolve it.',
+      { path },
+    );
+  }
+  if (error.code === 'ECONNREFUSED') {
+    return new ProxmoxError(
+      'network',
+      `${target} refused the connection (ECONNREFUSED): check the API port — the Proxmox web ` +
+        'interface answers on 8006 by default.',
+      { path },
+    );
+  }
+  if (UNREACHABLE_ERROR_CODES.has(error.code)) {
+    return new ProxmoxError(
+      'network',
+      `${target} is unreachable (${code}): check that the host is up and that nothing filters ` +
+        'the connection between Gladys and Proxmox.',
+      { path },
+    );
+  }
+  return new ProxmoxError('network', `Cannot reach ${target} (${code}).`, { path });
+}
+
 /**
  * Perform one authenticated GET on the Proxmox API and return its `data`.
  * @param {object} server - A configured server.
@@ -274,15 +329,7 @@ export function get(server, path, query = {}) {
         );
         return;
       }
-      fail(
-        new ProxmoxError(
-          'network',
-          `Cannot reach ${server.host}:${server.port} (${error.code ?? error.message}).`,
-          {
-            path,
-          },
-        ),
-      );
+      fail(networkError(server, path, error));
     });
 
     request.end();

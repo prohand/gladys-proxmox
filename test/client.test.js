@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { get, normalizeFingerprint, ProxmoxError, resolveTlsMode } from '../src/proxmox/client.js';
+import {
+  get,
+  networkError,
+  normalizeFingerprint,
+  ProxmoxError,
+  resolveTlsMode,
+} from '../src/proxmox/client.js';
 import { normalizeConfig } from '../src/config.js';
 import { startFakeProxmox } from './helpers/fakeProxmox.js';
 import { TEST_FINGERPRINT } from './fixtures/tls.js';
@@ -133,6 +139,51 @@ test('an unreachable host is reported as a network problem', async () => {
     assert.equal(error.kind, 'network');
     return true;
   });
+});
+
+test('a refused connection names the port, not the network', async () => {
+  // Port 1 on the loopback: something answers for the address, nothing listens.
+  await assert.rejects(get(configFor(1), '/nodes'), (error) => {
+    assert.equal(error.kind, 'network');
+    assert.match(error.message, /refused the connection/);
+    return true;
+  });
+});
+
+test('networkError names the fix behind each socket error code', () => {
+  const server = { host: 'pve.lan', port: 8006 };
+
+  // A host field holding a URL fails DNS resolution: point at the field, not
+  // at the network.
+  for (const code of ['EAI_AGAIN', 'ENOTFOUND']) {
+    const error = networkError(server, '/nodes', Object.assign(new Error('getaddrinfo'), { code }));
+    assert.equal(error.kind, 'network');
+    assert.equal(error.path, '/nodes');
+    assert.match(error.message, /Cannot resolve the host name "pve.lan"/);
+    assert.match(error.message, new RegExp(code));
+  }
+
+  const refused = networkError(
+    server,
+    '/nodes',
+    Object.assign(new Error('x'), { code: 'ECONNREFUSED' }),
+  );
+  assert.match(refused.message, /pve.lan:8006 refused the connection/);
+  assert.match(refused.message, /8006/);
+
+  const unreachable = networkError(
+    server,
+    '/nodes',
+    Object.assign(new Error('x'), { code: 'EHOSTUNREACH' }),
+  );
+  assert.match(unreachable.message, /unreachable \(EHOSTUNREACH\)/);
+
+  const other = networkError(
+    server,
+    '/nodes',
+    Object.assign(new Error('x'), { code: 'ECONNRESET' }),
+  );
+  assert.match(other.message, /Cannot reach pve.lan:8006 \(ECONNRESET\)/);
 });
 
 test('empty query parameters are dropped from the URL', async () => {

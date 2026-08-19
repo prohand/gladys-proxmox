@@ -178,20 +178,26 @@ curl -sS --insecure \
 The first six fields below exist **twice**: once for the first Proxmox, once
 for the optional second one. The last four are shared by both.
 
-| Field                                  | Required | Default | Notes                                                                                      |
-| -------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
-| **Name of this Proxmox**               | no       | Proxmox | Prefixes the name of every device of that server. Second block defaults to `Proxmox 2`.    |
-| **Proxmox host**                       | yes      | —       | IP or hostname of any node — one node answers for the whole cluster.                       |
-| **API port**                           | no       | `8006`  | The Proxmox VE API port.                                                                   |
-| **API token ID**                       | yes      | —       | The full `user@realm!tokenname` form, e.g. `gladys@pve!tasks`.                             |
-| **API token secret**                   | yes      | —       | The value Proxmox shows once. Stored encrypted by Gladys, never sent back to your browser. |
-| **TLS certificate fingerprint**        | no       | empty   | SHA-256 fingerprint of the node certificate. See below.                                    |
-| **Verify the TLS certificate**         | no       | on      | Leave on. See below.                                                                       |
-| **Nodes to monitor**                   | no       | all     | Comma-separated node names, e.g. `pve1, pve2`. Also scopes the VMs/LXC reported.           |
-| **How far back to look for a backup**  | no       | `7` d   | The last backup is searched inside this window.                                            |
-| **What counts as a successful backup** | no       | OK only | Whether a backup that ended with `WARNINGS: n` still counts as successful.                 |
-| **Time zone**                          | no       | host    | IANA zone used to render the timestamp, e.g. `Europe/Paris`.                               |
-| **Refresh interval**                   | no       | `300` s | How often Proxmox is read.                                                                 |
+| Field                                  | Required | Default | Notes                                                                                                   |
+| -------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| **Name of this Proxmox**               | no       | Proxmox | Prefixes the name of every device of that server. Second block defaults to `Proxmox 2`.                 |
+| **Proxmox host**                       | yes      | —       | IP or hostname of any node — one node answers for the whole cluster. A pasted URL works too, see below. |
+| **API port**                           | no       | `8006`  | The Proxmox VE API port.                                                                                |
+| **API token ID**                       | yes      | —       | The full `user@realm!tokenname` form, e.g. `gladys@pve!tasks`.                                          |
+| **API token secret**                   | yes      | —       | The value Proxmox shows once. Stored encrypted by Gladys, never sent back to your browser.              |
+| **TLS certificate fingerprint**        | no       | empty   | SHA-256 fingerprint of the node certificate. See below.                                                 |
+| **Verify the TLS certificate**         | no       | on      | Leave on. See below.                                                                                    |
+| **Nodes to monitor**                   | no       | all     | Comma-separated node names, e.g. `pve1, pve2`. Also scopes the VMs/LXC reported.                        |
+| **How far back to look for a backup**  | no       | `7` d   | The last backup is searched inside this window.                                                         |
+| **What counts as a successful backup** | no       | OK only | Whether a backup that ended with `WARNINGS: n` still counts as successful.                              |
+| **Time zone**                          | no       | host    | IANA zone used to render the timestamp, e.g. `Europe/Paris`.                                            |
+| **Refresh interval**                   | no       | `300` s | How often Proxmox is read.                                                                              |
+
+_Proxmox host_ takes a host name or an IP address, but the address you have in
+front of you is the one in your browser — so a pasted URL is accepted as well:
+`https://pve.lan:8006/#v1:0:18` is read as the host `pve.lan` on port `8006`.
+The scheme, the path and any credentials are dropped, and the port written in
+the address wins over the _API port_ field.
 
 Only the first server's host and token are mandatory: the whole second block is
 optional. _How far back to look for a backup_, _What counts as a successful
@@ -290,6 +296,14 @@ freezes on its last value.
 
 **"Proxmox presents a self-signed certificate"** — pin its fingerprint, see the
 TLS section above.
+
+**"Cannot resolve the host name …"** — the name in _Proxmox host_ could not be
+looked up (`EAI_AGAIN`, `ENOTFOUND`). Check its spelling, and that the machine
+running the integration resolves it — a short `.local`/LAN name often only
+resolves on the network it comes from, where the IP address always works.
+
+**"… refused the connection"** — the host answers but nothing listens on that
+port: check the _API port_ (`8006` by default).
 
 **"Cannot reach …"** — check the host and the port (`8006`), and that the
 Gladys container can reach the node on your network. With two servers
