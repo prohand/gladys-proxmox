@@ -14,6 +14,10 @@ and the [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/
 > and `VM.Audit` on `/vms` — and never starts, stops, migrates or reconfigures
 > anything.
 
+Up to **two Proxmox servers** can be monitored at once: the configuration form
+carries two identical blocks, each with its own host, API token, TLS posture
+and node filter.
+
 ## What it publishes
 
 **One Gladys device per Proxmox node** (`Proxmox <node>`), with three
@@ -115,6 +119,7 @@ dependencies** beyond the SDK.
 │  │  └─ proxmoxGuest.js             #   the guest device: its status feature, and its poll
 │  ├─ actions.js                     # the Configuration screen buttons
 │  ├─ format.js                      # timestamps in the user's time zone, durations, summaries
+│  ├─ servers.js                     # the flat form -> the list of Proxmox servers, and id scoping
 │  └─ config.js                      # config defaults, normalization, bounds
 ├─ docs/
 │  ├─ en.md                          # user documentation (re-hosted by Gladys and
@@ -126,19 +131,33 @@ dependencies** beyond the SDK.
 
 ## Configuration
 
-| Key                    | Type    | Default   | Purpose                                                     |
-| ---------------------- | ------- | --------- | ----------------------------------------------------------- |
-| `host`                 | string  | —         | IP/hostname of any node (one answers for the whole cluster) |
-| `port`                 | number  | `8006`    | Proxmox VE API port                                         |
-| `token_id`             | string  | —         | `user@realm!tokenname`                                      |
-| `token_secret`         | secret  | —         | Shown once by Proxmox; stored encrypted, never logged       |
-| `tls_fingerprint`      | string  | empty     | SHA-256 fingerprint to pin                                  |
-| `tls_verify`           | boolean | `true`    | Chain-of-trust check when no fingerprint is pinned          |
-| `nodes_filter`         | string  | all       | Comma-separated node names; also scopes the guests          |
-| `backup_lookback_days` | number  | `7`       | How far back the last backup is looked for                  |
-| `backup_success_scope` | select  | `ok_only` | Whether `WARNINGS: n` still counts as a successful backup   |
-| `timezone`             | string  | host      | IANA zone for the rendered timestamp                        |
-| `poll_frequency`       | number  | `300`     | Refresh interval, seconds                                   |
+Per server — the same keys again with a `_2` suffix for the second one
+(`host_2`, `token_id_2`…), all optional:
+
+| Key               | Type    | Default   | Purpose                                                                     |
+| ----------------- | ------- | --------- | --------------------------------------------------------------------------- |
+| `label`           | string  | `Proxmox` | Prefixes the device names of that server (`Proxmox 2` for the second block) |
+| `host`            | string  | —         | IP/hostname of any node (one answers for the whole cluster)                 |
+| `port`            | number  | `8006`    | Proxmox VE API port                                                         |
+| `token_id`        | string  | —         | `user@realm!tokenname`                                                      |
+| `token_secret`    | secret  | —         | Shown once by Proxmox; stored encrypted, never logged                       |
+| `tls_fingerprint` | string  | empty     | SHA-256 fingerprint to pin                                                  |
+| `tls_verify`      | boolean | `true`    | Chain-of-trust check when no fingerprint is pinned                          |
+| `nodes_filter`    | string  | all       | Comma-separated node names; also scopes the guests                          |
+
+Shared by every configured server:
+
+| Key                    | Type   | Default   | Purpose                                                   |
+| ---------------------- | ------ | --------- | --------------------------------------------------------- |
+| `backup_lookback_days` | number | `7`       | How far back the last backup is looked for                |
+| `backup_success_scope` | select | `ok_only` | Whether `WARNINGS: n` still counts as a successful backup |
+| `timezone`             | string | host      | IANA zone for the rendered timestamp                      |
+| `poll_frequency`       | number | `300`     | Refresh interval, seconds                                 |
+
+A server exists as soon as its host and both token fields are filled in. The
+first server's Gladys external ids are unscoped (`…:proxmox-node:pve1`), the
+second server's carry its id (`…:proxmox-node:2@pve1`), so adding a second
+Proxmox never renames or orphans the devices of the first.
 
 ### What counts as a successful backup
 

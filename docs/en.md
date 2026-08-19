@@ -37,6 +37,20 @@ Because the duration and both binary features keep history, the natural Gladys
 usage is a scene triggered on them: _when "Backup status" on pve1 becomes off,
 notify me_, or _when "Status" of my NAS VM becomes off, notify me_.
 
+### Two Proxmox servers
+
+The configuration has **two identical blocks**: fill in the second one and the
+integration monitors a second, completely independent Proxmox — its own host,
+its own API token, its own TLS settings and its own node filter. Everything
+below (permissions, TLS, actions) applies to each of them separately.
+
+Devices of the second server are named after its own label, so nothing
+collides: a node called `pve1` on both servers shows up as **Proxmox pve1** and
+**Proxmox 2 pve1**, and a VM 101 on each shows up twice as well. Set _Name of
+this Proxmox_ on either block to name them yourself (`Home`, `Office`…).
+
+If you only have one Proxmox, leave the second block empty and nothing changes.
+
 ---
 
 ## Required Proxmox permissions (read-only)
@@ -161,8 +175,12 @@ curl -sS --insecure \
 
 ## Configuration
 
+The first six fields below exist **twice**: once for the first Proxmox, once
+for the optional second one. The last four are shared by both.
+
 | Field                                  | Required | Default | Notes                                                                                      |
 | -------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
+| **Name of this Proxmox**               | no       | Proxmox | Prefixes the name of every device of that server. Second block defaults to `Proxmox 2`.    |
 | **Proxmox host**                       | yes      | —       | IP or hostname of any node — one node answers for the whole cluster.                       |
 | **API port**                           | no       | `8006`  | The Proxmox VE API port.                                                                   |
 | **API token ID**                       | yes      | —       | The full `user@realm!tokenname` form, e.g. `gladys@pve!tasks`.                             |
@@ -174,6 +192,11 @@ curl -sS --insecure \
 | **What counts as a successful backup** | no       | OK only | Whether a backup that ended with `WARNINGS: n` still counts as successful.                 |
 | **Time zone**                          | no       | host    | IANA zone used to render the timestamp, e.g. `Europe/Paris`.                               |
 | **Refresh interval**                   | no       | `300` s | How often Proxmox is read.                                                                 |
+
+Only the first server's host and token are mandatory: the whole second block is
+optional. _How far back to look for a backup_, _What counts as a successful
+backup_, _Time zone_ and _Refresh interval_ are configured once and apply to
+every server.
 
 ### TLS: the self-signed Proxmox certificate
 
@@ -230,6 +253,10 @@ still running is not the last backup yet.
 - **Refresh now** — reads the backups and the VM/LXC states immediately, instead
   of waiting for the next refresh.
 
+Both run on every configured server, and prefix each result with `[<name>]` when
+there are two — so a message like `[Office] Proxmox refused the API token (401)`
+tells you which one to fix.
+
 ## Troubleshooting
 
 **"Proxmox refused the API token (401)"** — the token ID or the secret is
@@ -265,7 +292,18 @@ freezes on its last value.
 TLS section above.
 
 **"Cannot reach …"** — check the host and the port (`8006`), and that the
-Gladys container can reach the node on your network.
+Gladys container can reach the node on your network. With two servers
+configured, the message names the one that did not answer; the other keeps
+being refreshed normally.
+
+**Two devices with the same name** — both servers use the same label. Set
+_Name of this Proxmox_ on at least one block. Renaming a server changes the
+names of the devices it discovers from then on; devices Gladys already created
+keep the name you see in Gladys and can be renamed there.
+
+**The devices of my second server disappeared from the dashboard** — emptying
+the second block stops it from being monitored, but its Gladys devices remain,
+frozen on their last known value, until you delete them in Gladys.
 
 **Timestamps are off by a few hours** — set the _Time zone_ field to your IANA
 zone (`Europe/Paris`, `America/New_York`…). Left empty, the integration uses the

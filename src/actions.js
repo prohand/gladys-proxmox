@@ -8,13 +8,16 @@
 // list. An under-privileged setup therefore looks like "everything works, this
 // node simply never backs anything up". This action probes each node explicitly
 // and names what is missing.
+//
+// Both actions run on EVERY configured Proxmox server, and say which one they
+// are talking about as soon as there is more than one.
 // -----------------------------------------------------------------------------
 
 import { createLogger } from '@gladysassistant/integration-sdk';
 import { ProxmoxError } from './proxmox/client.js';
 import { listNodes, probeNodeAudit } from './proxmox/nodes.js';
 import { fetchGuests } from './proxmox/guests.js';
-import { isConfigured } from './config.js';
+import { listServers } from './servers.js';
 import { pollAllDevices } from './devices/index.js';
 import { formatBackupSummary, resolveTimezone } from './format.js';
 
@@ -67,17 +70,59 @@ export function describeError(error) {
 }
 
 /**
+ * Name the server a message is about — but only when there is more than one:
+ * a single-server setup has nothing to disambiguate.
+ * @param {object} server - The server.
+ * @param {{en: string, fr: string}} message - The message.
+ * @param {boolean} named - Whether the label must be shown.
+ * @returns {{en: string, fr: string}} The message, prefixed or not.
+ */
+function withServerLabel(server, message, named) {
+  if (!named) {
+    return message;
+  }
+  return {
+    en: `[${server.label}] ${message.en}`,
+    fr: `[${server.label}] ${message.fr}`,
+  };
+}
+
+/**
+ * Join one message per server into the single string shown under the button.
+ * @param {{en: string, fr: string}[]} messages - The per-server messages.
+ * @returns {{en: string, fr: string}} The joined message.
+ */
+function joinMessages(messages) {
+  return {
+    en: messages.map((message) => message.en).join(' '),
+    fr: messages.map((message) => message.fr).join(' '),
+  };
+}
+
+/**
+ * Report what went wrong on the servers a discovery could not read.
+ * @param {{server: object, error: Error}[]} failures - The failures.
+ * @param {boolean} named - Whether the server labels must be shown.
+ * @returns {{en: string, fr: string}} The message.
+ */
+export function describeFailures(failures, named = failures.length > 1) {
+  return joinMessages(
+    failures.map(({ server, error }) => withServerLabel(server, describeError(error), named)),
+  );
+}
+
+/**
  * Count the guests the token can actually see, without failing the whole test
  * when that read is the only thing that went wrong.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @returns {Promise<{en: string, fr: string}>} The sentence appended to the test result.
  */
-async function describeGuestVisibility(config) {
+async function describeGuestVisibility(server) {
   let guests;
   try {
-    guests = await fetchGuests(config, { force: true });
+    guests = await fetchGuests(server, { force: true });
   } catch (error) {
-    logger.warn('test_connection: the guest list could not be read', error);
+    logger.warn(`test_connection: the guest list of ${server.label} could not be read`, error);
     return {
       en: ` The VM/LXC list could not be read: ${error.message}`,
       fr: ` La liste des VM/LXC n'a pas pu être lue : ${error.message}`,
@@ -103,21 +148,16 @@ async function describeGuestVisibility(config) {
 }
 
 /**
- * `test_connection`: reachability, authentication, then the read-only
- * privileges on every monitored node and on the guests.
- * @param {object} config - Normalized configuration.
- * @returns {Promise<{en: string, fr: string}>} The message shown under the button.
+ * Run the connection test against ONE server.
+ * @param {object} server - A configured server.
+ * @returns {Promise<{en: string, fr: string}>} What that server answered.
  */
-export async function testConnection(config) {
-  if (!isConfigured(config)) {
-    return NOT_CONFIGURED;
-  }
-
+async function testServer(server) {
   let nodes;
   try {
-    nodes = await listNodes(config);
+    nodes = await listNodes(server);
   } catch (error) {
-    logger.error('test_connection: node listing failed', error);
+    logger.error(`test_connection: node listing failed on ${server.label}`, error);
     return describeError(error);
   }
 
@@ -128,10 +168,10 @@ export async function testConnection(config) {
     };
   }
 
-  const probes = await Promise.all(nodes.map(({ node }) => probeNodeAudit(config, node)));
+  const probes = await Promise.all(nodes.map(({ node }) => probeNodeAudit(server, node)));
   const granted = probes.filter((probe) => probe.granted).map((probe) => probe.node);
   const denied = probes.filter((probe) => !probe.granted).map((probe) => probe.node);
-  const guestsMessage = await describeGuestVisibility(config);
+  const guestsMessage = await describeGuestVisibility(server);
 
   if (denied.length === 0) {
     return {
@@ -148,33 +188,42 @@ export async function testConnection(config) {
   return {
     en:
       `Connected, but the token cannot read the task log of: ${denied.join(', ')}.` +
-      ` Grant Sys.Audit (role PVEAuditor) on /nodes to ${config.token_id}.${grantedPart}${guestsMessage.en}`,
+      ` Grant Sys.Audit (role PVEAuditor) on /nodes to ${server.token_id}.${grantedPart}${guestsMessage.en}`,
     fr:
       `Connexion établie, mais le jeton ne peut pas lire le journal des tâches de : ${denied.join(', ')}.` +
-      ` Accordez Sys.Audit (rôle PVEAuditor) sur /nodes à ${config.token_id}.${grantedPartFr}${guestsMessage.fr}`,
+      ` Accordez Sys.Audit (rôle PVEAuditor) sur /nodes à ${server.token_id}.${grantedPartFr}${guestsMessage.fr}`,
   };
 }
 
 /**
- * `refresh_now`: read Proxmox immediately, on every monitored node and guest.
- * @param {object} gladys - The SDK instance.
+ * `test_connection`: reachability, authentication, then the read-only
+ * privileges on every monitored node and on the guests — on every configured
+ * Proxmox server.
  * @param {object} config - Normalized configuration.
  * @returns {Promise<{en: string, fr: string}>} The message shown under the button.
  */
-export async function refreshNow(gladys, config) {
-  if (!isConfigured(config)) {
+export async function testConnection(config) {
+  const servers = listServers(config);
+  if (servers.length === 0) {
     return NOT_CONFIGURED;
   }
 
-  const results = await pollAllDevices(gladys, config);
-  if (results.length === 0) {
-    return {
-      en: 'No device is being monitored yet. Run "Test the connection", then save the configuration.',
-      fr: 'Aucun appareil surveillé pour le moment. Lancez « Tester la connexion », puis enregistrez la configuration.',
-    };
-  }
+  // The servers are independent: testing them in parallel keeps the action
+  // inside its manifest timeout however many are configured.
+  const messages = await Promise.all(servers.map((server) => testServer(server)));
+  return joinMessages(
+    messages.map((message, index) => withServerLabel(servers[index], message, servers.length > 1)),
+  );
+}
 
-  const timezone = resolveTimezone(config.timezone);
+/**
+ * Summarize what one server answered during a refresh.
+ * @param {object} server - The server.
+ * @param {object[]} results - Its results, as returned by `pollAllDevices()`.
+ * @param {string} timezone - A resolved IANA time zone.
+ * @returns {{en: string, fr: string}} The summary.
+ */
+function summarizeServer(server, results, timezone) {
   const failed = results.filter((result) => result.error);
   const nodes = results.filter((result) => result.kind === 'node' && !result.error);
   const guests = results.filter((result) => result.kind === 'guest' && !result.error);
@@ -190,16 +239,60 @@ export async function refreshNow(gladys, config) {
       ? ` ${running}/${guests.length} VM/LXC en cours d'exécution.`
       : ' Aucune VM/LXC surveillée.';
 
-  if (failed.length === 0) {
+  const failedLabels = failed.map((result) => result.node ?? result.key).join(', ');
+  const failedPart = failed.length > 0 ? ` Failed on: ${failedLabels}.` : '';
+  const failedPartFr = failed.length > 0 ? ` Échec sur : ${failedLabels}.` : '';
+
+  return {
+    en: `Last backup — ${backups}.${guestSummary}${failedPart}`,
+    fr: `Dernière sauvegarde — ${backups}.${guestSummaryFr}${failedPartFr}`,
+  };
+}
+
+/**
+ * `refresh_now`: read every configured Proxmox immediately, on every monitored
+ * node and guest.
+ * @param {object} gladys - The SDK instance.
+ * @param {object} config - Normalized configuration.
+ * @returns {Promise<{en: string, fr: string}>} The message shown under the button.
+ */
+export async function refreshNow(gladys, config) {
+  const servers = listServers(config);
+  if (servers.length === 0) {
+    return NOT_CONFIGURED;
+  }
+
+  const results = await pollAllDevices(gladys, config);
+  if (results.length === 0) {
     return {
-      en: `Refreshed. Last backup — ${backups}.${guestSummary}`,
-      fr: `Rafraîchi. Dernière sauvegarde — ${backups}.${guestSummaryFr}`,
+      en: 'No device is being monitored yet. Run "Test the connection", then save the configuration.',
+      fr: 'Aucun appareil surveillé pour le moment. Lancez « Tester la connexion », puis enregistrez la configuration.',
     };
   }
 
-  const failedLabels = failed.map((result) => result.node ?? result.key).join(', ');
-  return {
-    en: `Refreshed ${results.length - failed.length}/${results.length} device(s). Last backup — ${backups}.${guestSummary} Failed on: ${failedLabels}.`,
-    fr: `${results.length - failed.length}/${results.length} appareil(s) rafraîchi(s). Dernière sauvegarde — ${backups}.${guestSummaryFr} Échec sur : ${failedLabels}.`,
-  };
+  const timezone = resolveTimezone(config.timezone);
+  const failed = results.filter((result) => result.error);
+  const head =
+    failed.length === 0
+      ? { en: 'Refreshed.', fr: 'Rafraîchi.' }
+      : {
+          en: `Refreshed ${results.length - failed.length}/${results.length} device(s).`,
+          fr: `${results.length - failed.length}/${results.length} appareil(s) rafraîchi(s).`,
+        };
+
+  const perServer = servers
+    .map((server) => ({
+      server,
+      results: results.filter((result) => result.server?.id === server.id),
+    }))
+    .filter((entry) => entry.results.length > 0)
+    .map((entry) =>
+      withServerLabel(
+        entry.server,
+        summarizeServer(entry.server, entry.results, timezone),
+        servers.length > 1,
+      ),
+    );
+
+  return joinMessages([head, ...perServer]);
 }

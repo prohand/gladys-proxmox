@@ -6,7 +6,8 @@
 // in `src/devices/` — it only:
 //   1. instantiates the SDK (connection, auth, reconnection: handled for you);
 //   2. registers the event handlers BEFORE connect();
-//   3. connects, discovers the nodes and guests, and publishes them.
+//   3. connects, discovers the nodes and guests of every configured Proxmox
+//      server, and publishes them.
 //
 // Environment variables provided by the Gladys supervisor to the container:
 //   - GLADYS_HOST_API_URL         (host API URL)
@@ -16,9 +17,10 @@
 // -----------------------------------------------------------------------------
 
 import { GladysIntegration, logger } from '@gladysassistant/integration-sdk';
-import { isConfigured, normalizeConfig } from './src/config.js';
-import { buildDiscoveredDevices, pollDevice } from './src/devices/index.js';
-import { describeError, refreshNow, testConnection } from './src/actions.js';
+import { normalizeConfig } from './src/config.js';
+import { hasConfiguredServer, listServers } from './src/servers.js';
+import { discoverDevices, pollDevice } from './src/devices/index.js';
+import { describeError, describeFailures, refreshNow, testConnection } from './src/actions.js';
 
 const gladys = new GladysIntegration();
 
@@ -28,17 +30,23 @@ let config = normalizeConfig();
 // --- Discovery: Gladys asks for the list of devices --------------------------
 gladys.onScanRequest(async () => {
   logger.info('onScanRequest -> discovering Proxmox nodes and guests');
-  if (!isConfigured(config)) {
+  if (!hasConfiguredServer(config)) {
     // Throw: the SDK acknowledges with success:false, and the user sees why in
     // the Discovery tab instead of an empty list with no explanation.
     throw new Error('The Proxmox host and API token must be configured first.');
   }
-  await publishDevices();
+  const { devices, failures } = await publishDevices();
+  if (devices.length === 0 && failures.length > 0) {
+    // Nothing at all came back: say why rather than showing an empty list. A
+    // partial failure (one server of two) is reported by the connection status
+    // instead, so the devices that WERE found still land in the Discovery tab.
+    throw new Error(describeFailures(failures).en);
+  }
 });
 
 // --- Polling: Gladys asks to refresh one device (a node, or a guest) ---------
 gladys.onPoll(async (device) => {
-  if (!isConfigured(config)) {
+  if (!hasConfiguredServer(config)) {
     logger.warn('onPoll ignored: the integration is not configured yet');
     return;
   }
@@ -84,7 +92,7 @@ gladys.on('connected', async () => {
  * @returns {Promise<void>} Resolves once the status has been reported.
  */
 async function initialize() {
-  if (!isConfigured(config)) {
+  if (!hasConfiguredServer(config)) {
     logger.info('Waiting for the configuration (host, token ID and token secret)');
     await gladys
       .setConnectionStatus(false, {
@@ -96,8 +104,16 @@ async function initialize() {
   }
 
   try {
-    await publishDevices();
-    await gladys.setConnectionStatus(true);
+    const { failures } = await publishDevices();
+    if (failures.length === 0) {
+      await gladys.setConnectionStatus(true);
+      return;
+    }
+    // One of the configured servers did not answer. The status is the only
+    // place that can say so: the devices of the other one keep updating.
+    await gladys
+      .setConnectionStatus(false, describeFailures(failures, listServers(config).length > 1))
+      .catch(() => {});
   } catch (error) {
     logger.error('Initialization failed', error);
     await gladys.setConnectionStatus(false, describeError(error)).catch(() => {});
@@ -105,12 +121,15 @@ async function initialize() {
 }
 
 /**
- * Discover the Proxmox nodes and guests, and publish them as Gladys devices.
- * @returns {Promise<void>} Resolves once the devices are published.
+ * Discover the nodes and guests of every configured Proxmox, and publish them
+ * as Gladys devices.
+ * @returns {Promise<{devices: object[], failures: object[]}>} What was
+ *   discovered, and which servers failed.
  */
 async function publishDevices() {
-  const devices = await buildDiscoveredDevices(gladys, config);
+  const { devices, failures } = await discoverDevices(gladys, config);
   await gladys.publishDiscoveredDevices(devices);
+  return { devices, failures };
 }
 
 // --- Graceful shutdown -------------------------------------------------------

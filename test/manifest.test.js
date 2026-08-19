@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DEFAULT_CONFIG } from '../src/config.js';
+import { SERVER_IDS, serverConfigKeys } from '../src/servers.js';
 
 const manifest = JSON.parse(
   await readFile(new URL('../gladys-assistant-integration.json', import.meta.url), 'utf8'),
@@ -49,9 +50,12 @@ test('every value-carrying config field is known to DEFAULT_CONFIG', () => {
   }
 });
 
-test('the section block is purely presentational', () => {
+test('the section blocks are purely presentational', () => {
   const sections = manifest.config_schema.filter((field) => field.type === 'section');
-  assert.equal(sections.length, 1);
+  assert.deepEqual(
+    sections.map((section) => section.key),
+    ['intro', 'second_server', 'shared_options'],
+  );
   for (const section of sections) {
     assert.equal(section.required, undefined);
     assert.equal(section.default, undefined);
@@ -64,12 +68,38 @@ test('the section block is purely presentational', () => {
   }
 });
 
-test('the token secret is declared as a secret field', () => {
-  const secret = manifest.config_schema.find((field) => field.key === 'token_secret');
-  assert.equal(secret.type, 'secret');
-  // A `secret` field must never declare a default: the value would be shipped
-  // in the manifest, and the schema rejects it.
-  assert.equal(secret.default, undefined);
+test('every token secret is declared as a secret field', () => {
+  const secrets = manifest.config_schema.filter((field) => field.key.startsWith('token_secret'));
+  assert.equal(secrets.length, SERVER_IDS.length);
+  for (const secret of secrets) {
+    assert.equal(secret.type, 'secret');
+    // A `secret` field must never declare a default: the value would be shipped
+    // in the manifest, and the schema rejects it.
+    assert.equal(secret.default, undefined);
+  }
+});
+
+test('both server blocks declare the same fields, with the same types', () => {
+  const byKey = new Map(manifest.config_schema.map((field) => [field.key, field]));
+  const [first, ...others] = SERVER_IDS.map((id) => serverConfigKeys(id));
+
+  for (const keys of [first, ...others]) {
+    for (const key of keys) {
+      assert.ok(byKey.has(key), `config field "${key}" is missing from the manifest`);
+    }
+  }
+  for (const keys of others) {
+    keys.forEach((key, index) => {
+      assert.equal(
+        byKey.get(key).type,
+        byKey.get(first[index]).type,
+        `"${key}" must have the same type as "${first[index]}"`,
+      );
+      // Only the first server is mandatory: an empty second block is how a
+      // single-Proxmox setup says "there is no second one".
+      assert.equal(byKey.get(key).required, false, `"${key}" must stay optional`);
+    });
+  }
 });
 
 test('the three credentials are the only required fields', () => {

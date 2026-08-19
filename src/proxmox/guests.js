@@ -12,9 +12,10 @@
 // rather than a 403 — which is why "Test the connection" says how many guests
 // are visible instead of just "OK".
 //
-// The answer is cached for a few seconds: Gladys polls every guest device
-// separately, and one poll round of a 40-guest cluster must not become 40
-// identical HTTP requests.
+// The answer is cached for a few seconds, PER SERVER: Gladys polls every guest
+// device separately, and one poll round of a 40-guest cluster must not become
+// 40 identical HTTP requests — nor must a poll round alternating between two
+// configured Proxmox servers evict the entry it is about to need again.
 // -----------------------------------------------------------------------------
 
 import { createLogger } from '@gladysassistant/integration-sdk';
@@ -31,25 +32,33 @@ export const GUESTS_CACHE_TTL_MS = 15_000;
 // The two guest kinds `/cluster/resources` reports for `type=vm`.
 const GUEST_KINDS = new Set(['qemu', 'lxc']);
 
-let cache = null;
+// cacheKey -> { at, promise }. One entry per configured server, so two servers
+// polled in the same round each keep their own snapshot.
+const cache = new Map();
 
 /**
- * The cache key of a configuration: a different host, port or node filter is a
- * different snapshot.
- * @param {object} config - Normalized configuration.
+ * The cache key of a server: a different host, port, token or node filter is a
+ * different snapshot. The token is part of it because two servers can point at
+ * the same host with tokens that do not see the same guests.
+ * @param {object} server - A configured server.
  * @returns {string} The key.
  */
-function cacheKey(config) {
-  return `${config.host}:${config.port}:${config.nodes_filter.toLowerCase()}`;
+function cacheKey(server) {
+  return [
+    server.host,
+    server.port,
+    server.token_id,
+    String(server.nodes_filter ?? '').toLowerCase(),
+  ].join('|');
 }
 
 /**
- * Forget the cached snapshot (configuration change, or a test that must not
+ * Forget every cached snapshot (configuration change, or a test that must not
  * inherit the previous one).
  * @returns {void}
  */
 export function clearGuestsCache() {
-  cache = null;
+  cache.clear();
 }
 
 /**
@@ -77,11 +86,11 @@ export function parseGuestKey(key) {
 
 /**
  * Read the guests of the cluster, straight from Proxmox.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @returns {Promise<object[]>} The guests, sorted by VMID.
  */
-async function readGuests(config) {
-  const data = await get(config, '/cluster/resources', { type: 'vm' });
+async function readGuests(server) {
+  const data = await get(server, '/cluster/resources', { type: 'vm' });
   if (!Array.isArray(data)) {
     throw new ProxmoxError('parse', 'Proxmox returned an unexpected answer for the guest list.');
   }
@@ -92,7 +101,7 @@ async function readGuests(config) {
       .filter((entry) => Number.isFinite(Number(entry?.vmid)))
       // A template is not a running thing: it has no meaningful on/off state.
       .filter((entry) => Number(entry?.template ?? 0) !== 1)
-      .filter((entry) => isMonitoredNode(config, entry?.node))
+      .filter((entry) => isMonitoredNode(server, entry?.node))
       .map((entry) => {
         const kind = String(entry.type);
         const vmid = Number(entry.vmid);
@@ -113,30 +122,31 @@ async function readGuests(config) {
 
 /**
  * The guests of the cluster, from the cache when it is still fresh.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {object} [options] - Options.
  * @param {boolean} [options.force] - Ignore the cache and re-read from Proxmox.
  * @returns {Promise<object[]>} The guests, sorted by VMID.
  */
-export async function fetchGuests(config, { force = false } = {}) {
-  const key = cacheKey(config);
+export async function fetchGuests(server, { force = false } = {}) {
+  const key = cacheKey(server);
   const now = Date.now();
 
-  if (!force && cache && cache.key === key && now - cache.at < GUESTS_CACHE_TTL_MS) {
-    return cache.promise;
+  const cached = cache.get(key);
+  if (!force && cached && now - cached.at < GUESTS_CACHE_TTL_MS) {
+    return cached.promise;
   }
 
-  const promise = readGuests(config);
-  cache = { key, at: now, promise };
+  const promise = readGuests(server);
+  cache.set(key, { at: now, promise });
   try {
     const guests = await promise;
-    logger.debug(`${guests.length} guest(s) visible to the token`);
+    logger.debug(`${server.label ?? server.host}: ${guests.length} guest(s) visible to the token`);
     return guests;
   } catch (error) {
     // A failed read must not be served to the next poll as if it were a
     // snapshot: drop it and let that poll try again.
-    if (cache?.promise === promise) {
-      cache = null;
+    if (cache.get(key)?.promise === promise) {
+      cache.delete(key);
     }
     throw error;
   }
@@ -144,12 +154,12 @@ export async function fetchGuests(config, { force = false } = {}) {
 
 /**
  * One guest, by its stable key.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {string} key - A key built by `guestKey()`.
  * @param {object} [options] - Passed through to `fetchGuests()`.
  * @returns {Promise<object|null>} The guest, or null when it is gone.
  */
-export async function fetchGuest(config, key, options) {
-  const guests = await fetchGuests(config, options);
+export async function fetchGuest(server, key, options) {
+  const guests = await fetchGuests(server, options);
   return guests.find((guest) => guest.key === key) ?? null;
 }

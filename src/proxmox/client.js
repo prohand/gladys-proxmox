@@ -68,24 +68,24 @@ export function normalizeFingerprint(fingerprint) {
  *   - `ca`: the standard chain-of-trust check (the node serves a certificate
  *     signed by a CA the container trusts).
  *   - `none`: no verification at all. Encrypted, but not authenticated.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @returns {{mode: string, fingerprint: string}} The TLS posture.
  */
-export function resolveTlsMode(config) {
-  const fingerprint = normalizeFingerprint(config.tls_fingerprint);
+export function resolveTlsMode(server) {
+  const fingerprint = normalizeFingerprint(server.tls_fingerprint);
   if (fingerprint.length > 0) {
     return { mode: 'fingerprint', fingerprint };
   }
-  return { mode: config.tls_verify === false ? 'none' : 'ca', fingerprint: '' };
+  return { mode: server.tls_verify === false ? 'none' : 'ca', fingerprint: '' };
 }
 
 /**
  * Build the Authorization header value of a Proxmox API token.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @returns {string} The `PVEAPIToken=...` header value.
  */
-function authorizationHeader(config) {
-  return `PVEAPIToken=${config.token_id}=${config.token_secret}`;
+function authorizationHeader(server) {
+  return `PVEAPIToken=${server.token_id}=${server.token_secret}`;
 }
 
 /**
@@ -122,13 +122,13 @@ function httpError(status, path, body) {
 
 /**
  * Perform one authenticated GET on the Proxmox API and return its `data`.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - A configured server.
  * @param {string} path - API path below `/api2/json`, e.g. `/nodes`.
  * @param {Record<string, string|number>} [query] - Query string parameters.
  * @returns {Promise<unknown>} The `data` member of the Proxmox response.
  */
-export function get(config, path, query = {}) {
-  const tls = resolveTlsMode(config);
+export function get(server, path, query = {}) {
+  const tls = resolveTlsMode(server);
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== null && value !== '') {
@@ -138,7 +138,7 @@ export function get(config, path, query = {}) {
   const queryString = search.toString();
   const fullPath = `/api2/json${path}${queryString ? `?${queryString}` : ''}`;
 
-  logger.debug(`GET https://${config.host}:${config.port}${fullPath} (tls: ${tls.mode})`);
+  logger.debug(`GET https://${server.host}:${server.port}${fullPath} (tls: ${tls.mode})`);
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -155,20 +155,20 @@ export function get(config, path, query = {}) {
 
     const request = https.request(
       {
-        host: config.host,
-        port: config.port,
+        host: server.host,
+        port: server.port,
         path: fullPath,
         method: 'GET',
         // No connection pooling: the fingerprint below is checked on the TLS
         // handshake, and a pooled socket would skip it on reuse. A poll every
         // few minutes has nothing to gain from keep-alive anyway.
         agent: false,
-        servername: config.host,
+        servername: server.host,
         // Pinning replaces the chain check: accept the handshake here, then
         // compare the certificate ourselves on `secureConnect` below.
         rejectUnauthorized: tls.mode === 'ca',
         headers: {
-          Authorization: authorizationHeader(config),
+          Authorization: authorizationHeader(server),
           Accept: 'application/json',
           'User-Agent': 'gladys-proxmox-integration',
         },
@@ -277,7 +277,7 @@ export function get(config, path, query = {}) {
       fail(
         new ProxmoxError(
           'network',
-          `Cannot reach ${config.host}:${config.port} (${error.code ?? error.message}).`,
+          `Cannot reach ${server.host}:${server.port} (${error.code ?? error.message}).`,
           {
             path,
           },

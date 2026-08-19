@@ -19,6 +19,7 @@ import {
   DEVICE_FEATURE_TYPES,
 } from '@gladysassistant/integration-sdk';
 import { fetchGuest } from '../proxmox/guests.js';
+import { scopeId } from '../servers.js';
 
 export const DEVICE_TYPE = 'proxmox-guest';
 
@@ -30,38 +31,44 @@ export const FEATURE = {
 
 /**
  * External ids of the Gladys device representing one guest.
+ *
+ * A VMID is unique inside ONE cluster: with a second Proxmox configured, the
+ * key is scoped to the server it was read from. The first server's ids stay
+ * unscoped, so an installation that only ever had one server keeps its devices.
  * @param {object} gladys - The SDK instance.
+ * @param {object} server - The server the guest belongs to.
  * @param {string} key - The guest key (`qemu-101`, `lxc-200`).
  * @returns {object} `{ device, feature(key) }`.
  */
-export function guestExternalIds(gladys, key) {
-  return gladys.externalIds(DEVICE_TYPE, key);
+export function guestExternalIds(gladys, server, key) {
+  return gladys.externalIds(DEVICE_TYPE, scopeId(server.id, key));
 }
 
 /**
- * The name shown in Gladys: the Proxmox guest name, with its VMID so two
- * guests that share a name stay distinguishable.
+ * The name shown in Gladys: the server label, the Proxmox guest name, and its
+ * VMID so two guests that share a name stay distinguishable.
+ * @param {object} server - The server the guest belongs to.
  * @param {object} guest - A normalized guest.
  * @returns {string} e.g. "Proxmox nextcloud (101)".
  */
-export function guestDeviceName(guest) {
+export function guestDeviceName(server, guest) {
   const label = guest.name.length > 0 ? guest.name : guest.kind.toUpperCase();
-  return `Proxmox ${label} (${guest.vmid})`;
+  return `${server.label} ${label} (${guest.vmid})`;
 }
 
 /**
  * Build the discovery payload of one guest.
  * @param {object} gladys - The SDK instance.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - The server the guest belongs to.
  * @param {object} guest - A normalized guest.
  * @returns {object} The device, in the standard Gladys format.
  */
-export function buildGuestDevice(gladys, config, guest) {
-  const ids = guestExternalIds(gladys, guest.key);
+export function buildGuestDevice(gladys, server, guest) {
+  const ids = guestExternalIds(gladys, server, guest.key);
   return {
-    name: guestDeviceName(guest),
+    name: guestDeviceName(server, guest),
     external_id: ids.device,
-    poll_frequency: config.poll_frequency,
+    poll_frequency: server.poll_frequency,
     features: [
       {
         name: 'Status',
@@ -85,22 +92,24 @@ export function buildGuestDevice(gladys, config, guest) {
  * publishes nothing: its last known state stays on screen rather than being
  * turned into a fake OFF.
  * @param {object} gladys - The SDK instance.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - The server the guest belongs to.
  * @param {string} key - The guest key (`qemu-101`, `lxc-200`).
  * @returns {Promise<object|null>} The guest, or null when it is gone.
  */
-export async function pollGuest(gladys, config, key) {
-  const guest = await fetchGuest(config, key);
+export async function pollGuest(gladys, server, key) {
+  const guest = await fetchGuest(server, key);
   if (!guest) {
-    logger.warn(`Guest ${key} is not visible to the token any more: nothing published.`);
+    logger.warn(
+      `${server.label}: guest ${key} is not visible to the token any more: nothing published.`,
+    );
     return null;
   }
 
-  logger.debug(`Guest ${key} (${guest.node}): ${guest.status}`);
+  logger.debug(`${server.label}: guest ${key} (${guest.node}): ${guest.status}`);
 
   await gladys.publishStates([
     {
-      device_feature_external_id: guestExternalIds(gladys, key).feature(FEATURE.STATUS),
+      device_feature_external_id: guestExternalIds(gladys, server, key).feature(FEATURE.STATUS),
       state: guest.running ? 1 : 0,
     },
   ]);

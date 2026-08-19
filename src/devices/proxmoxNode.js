@@ -27,6 +27,7 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 import { fetchLastBackup } from '../proxmox/backups.js';
+import { scopeId } from '../servers.js';
 import { formatBackupSummary, formatLastBackup, resolveTimezone } from '../format.js';
 
 export const DEVICE_TYPE = 'proxmox-node';
@@ -46,30 +47,36 @@ const MAX_BACKUP_DURATION_SECONDS = 7 * 86400;
 /**
  * External ids of the Gladys device representing a Proxmox node.
  *
- * The node name is the platform id: it is unique inside a cluster and stable
- * across restarts, which is exactly what an external id must be.
+ * The platform id is the node name, scoped to the server it belongs to: a name
+ * is unique inside one cluster and stable across restarts, but two configured
+ * Proxmox servers can perfectly well both hold a node called `pve`. The first
+ * server's ids stay unscoped, so nothing is renamed under an installation that
+ * only ever had one server.
  * @param {object} gladys - The SDK instance.
+ * @param {object} server - The server the node belongs to.
  * @param {string} node - Proxmox node name.
  * @returns {object} `{ device, feature(key) }`.
  */
-export function nodeExternalIds(gladys, node) {
-  return gladys.externalIds(DEVICE_TYPE, node);
+export function nodeExternalIds(gladys, server, node) {
+  return gladys.externalIds(DEVICE_TYPE, scopeId(server.id, node));
 }
 
 /**
  * Build the discovery payload of one node.
  * @param {object} gladys - The SDK instance.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - The server the node belongs to.
  * @param {string} node - Proxmox node name.
  * @returns {object} The device, in the standard Gladys format.
  */
-export function buildNodeDevice(gladys, config, node) {
-  const ids = nodeExternalIds(gladys, node);
+export function buildNodeDevice(gladys, server, node) {
+  const ids = nodeExternalIds(gladys, server, node);
   return {
-    name: `Proxmox ${node}`,
+    // The server label prefixes every device name: with two Proxmox servers
+    // configured, two nodes called `pve` must not both show up as "Proxmox pve".
+    name: `${server.label} ${node}`,
     external_id: ids.device,
     // Gladys calls onPoll at this interval (seconds).
-    poll_frequency: config.poll_frequency,
+    poll_frequency: server.poll_frequency,
     features: [
       {
         name: 'Last backup',
@@ -112,14 +119,14 @@ export function buildNodeDevice(gladys, config, node) {
 /**
  * Read the last backup of one node and publish its features.
  * @param {object} gladys - The SDK instance.
- * @param {object} config - Normalized configuration.
+ * @param {object} server - The server the node belongs to.
  * @param {string} node - Proxmox node name.
  * @returns {Promise<object|null>} The last backup, or null when there is none.
  */
-export async function pollNode(gladys, config, node) {
-  const ids = nodeExternalIds(gladys, node);
-  const timezone = resolveTimezone(config.timezone);
-  const backup = await fetchLastBackup(config, node);
+export async function pollNode(gladys, server, node) {
+  const ids = nodeExternalIds(gladys, server, node);
+  const timezone = resolveTimezone(server.timezone);
+  const backup = await fetchLastBackup(server, node);
 
   // The text feature always gets a state: "unknown" is an answer too, and it is
   // the one the user needs when a backup job silently stopped running.
@@ -144,7 +151,7 @@ export async function pollNode(gladys, config, node) {
   }
 
   logger.info(
-    `Last backup in the last ${config.backup_lookback_days} day(s) — ` +
+    `${server.label}: last backup in the last ${server.backup_lookback_days} day(s) — ` +
       formatBackupSummary(node, backup, timezone),
   );
 

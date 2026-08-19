@@ -9,7 +9,8 @@ import { createFakeGladys } from './helpers/fakeGladys.js';
 import { startFakeProxmox } from './helpers/fakeProxmox.js';
 import { TEST_FINGERPRINT } from './fixtures/tls.js';
 import { normalizeConfig } from '../src/config.js';
-import { buildDiscoveredDevices, pollDevice } from '../src/devices/index.js';
+import { listServers } from '../src/servers.js';
+import { discoverDevices, pollDevice } from '../src/devices/index.js';
 import { fetchLastBackup, resetTypeFilterSupport } from '../src/proxmox/backups.js';
 import { clearGuestsCache, fetchGuests } from '../src/proxmox/guests.js';
 import { listNodes } from '../src/proxmox/nodes.js';
@@ -31,6 +32,35 @@ function configFor(port, overrides = {}) {
     token_secret: 's3cret',
     tls_fingerprint: TEST_FINGERPRINT,
     timezone: 'UTC',
+    ...overrides,
+  });
+}
+
+/**
+ * The first (and usually only) server of such a configuration — what every
+ * function of `src/proxmox/` takes.
+ * @param {number} port - Port of the fake node.
+ * @param {object} [overrides] - Extra config keys.
+ * @returns {object} A configured server.
+ */
+function serverFor(port, overrides = {}) {
+  return listServers(configFor(port, overrides))[0];
+}
+
+/**
+ * Build a configuration pointing at TWO fake Proxmox servers.
+ * @param {number} port - Port of the first fake node.
+ * @param {number} secondPort - Port of the second fake node.
+ * @param {object} [overrides] - Extra config keys.
+ * @returns {object} A normalized configuration.
+ */
+function twoServerConfig(port, secondPort, overrides = {}) {
+  return configFor(port, {
+    host_2: '127.0.0.1',
+    port_2: secondPort,
+    token_id_2: 'gladys@pve!second',
+    token_secret_2: 'oth3r',
+    tls_fingerprint_2: TEST_FINGERPRINT,
     ...overrides,
   });
 }
@@ -137,7 +167,7 @@ function startCluster(overrides = {}) {
 test('listNodes returns every node, sorted, when no filter is set', async () => {
   const server = await startCluster();
   try {
-    assert.deepEqual(await listNodes(configFor(server.port)), NODES);
+    assert.deepEqual(await listNodes(serverFor(server.port)), NODES);
   } finally {
     await server.close();
   }
@@ -146,7 +176,7 @@ test('listNodes returns every node, sorted, when no filter is set', async () => 
 test('listNodes honours the nodes filter, case-insensitively', async () => {
   const server = await startCluster();
   try {
-    const nodes = await listNodes(configFor(server.port, { nodes_filter: ' PVE2 ' }));
+    const nodes = await listNodes(serverFor(server.port, { nodes_filter: ' PVE2 ' }));
     assert.deepEqual(
       nodes.map((entry) => entry.node),
       ['pve2'],
@@ -159,7 +189,7 @@ test('listNodes honours the nodes filter, case-insensitively', async () => {
 test('fetchLastBackup asks Proxmox to filter on the backup task type', async () => {
   const server = await startCluster();
   try {
-    const backup = await fetchLastBackup(configFor(server.port), 'pve1');
+    const backup = await fetchLastBackup(serverFor(server.port), 'pve1');
     const request = server.requests.find((entry) => entry.path === '/nodes/pve1/tasks');
     assert.deepEqual(request.query, { typefilter: 'vzdump', limit: '200', start: '0' });
 
@@ -182,8 +212,8 @@ test('a node that does not know typefilter is filtered here instead', async () =
         : { data: TASKS },
   });
   try {
-    const config = configFor(server.port);
-    const backup = await fetchLastBackup(config, 'pve1');
+    const first = serverFor(server.port);
+    const backup = await fetchLastBackup(first, 'pve1');
     assert.equal(backup.id, '101');
 
     const queries = server.requests
@@ -196,7 +226,7 @@ test('a node that does not know typefilter is filtered here instead', async () =
 
     // The rejection is remembered: the second read goes straight to the
     // fallback instead of paying for a doomed request again.
-    await fetchLastBackup(config, 'pve1');
+    await fetchLastBackup(first, 'pve1');
     assert.equal(server.requests.filter((entry) => entry.query.typefilter !== undefined).length, 1);
   } finally {
     await server.close();
@@ -214,7 +244,7 @@ test('a backup older than the window is not the last backup any more', async () 
     );
     assert.equal(wide.id, '103');
 
-    const narrow = await fetchLastBackup(configFor(server.port), 'pve1');
+    const narrow = await fetchLastBackup(serverFor(server.port), 'pve1');
     assert.equal(narrow, null);
   } finally {
     await server.close();
@@ -224,7 +254,7 @@ test('a backup older than the window is not the last backup any more', async () 
 test('a node whose task log holds no backup at all reports none', async () => {
   const server = await startCluster();
   try {
-    assert.equal(await fetchLastBackup(configFor(server.port), 'pve2'), null);
+    assert.equal(await fetchLastBackup(serverFor(server.port), 'pve2'), null);
   } finally {
     await server.close();
   }
@@ -235,7 +265,7 @@ test('a failed backup is reported as the last one, and as a failure', async () =
     '/nodes/pve1/tasks': taskRoute([TASKS[2], TASKS[3]]),
   });
   try {
-    const backup = await fetchLastBackup(configFor(server.port), 'pve1');
+    const backup = await fetchLastBackup(serverFor(server.port), 'pve1');
     assert.equal(backup.id, '102');
     assert.equal(backup.success, false);
     assert.equal(backup.statusType, 'error');
@@ -248,7 +278,7 @@ test('a backup that ended with warnings follows the configured scope', async () 
   const warned = [{ ...TASKS[1], status: 'WARNINGS: 2' }];
   const server = await startCluster({ '/nodes/pve1/tasks': taskRoute(warned) });
   try {
-    const strict = await fetchLastBackup(configFor(server.port), 'pve1');
+    const strict = await fetchLastBackup(serverFor(server.port), 'pve1');
     assert.equal(strict.success, false, 'the default scope only accepts OK');
 
     const wide = await fetchLastBackup(
@@ -264,7 +294,7 @@ test('a backup that ended with warnings follows the configured scope', async () 
 test('fetchGuests keeps the running guests and drops templates and storages', async () => {
   const server = await startCluster();
   try {
-    const guests = await fetchGuests(configFor(server.port), { force: true });
+    const guests = await fetchGuests(serverFor(server.port), { force: true });
     assert.deepEqual(
       guests.map((guest) => guest.key),
       ['qemu-101', 'lxc-200', 'qemu-300'],
@@ -279,15 +309,15 @@ test('fetchGuests keeps the running guests and drops templates and storages', as
 test('fetchGuests honours the nodes filter and caches its answer', async () => {
   const server = await startCluster();
   try {
-    const config = configFor(server.port, { nodes_filter: 'pve1' });
-    const guests = await fetchGuests(config, { force: true });
+    const monitored = serverFor(server.port, { nodes_filter: 'pve1' });
+    const guests = await fetchGuests(monitored, { force: true });
     assert.deepEqual(
       guests.map((guest) => guest.key),
       ['qemu-101', 'lxc-200'],
       'the guest of pve2 is out of scope',
     );
 
-    await fetchGuests(config);
+    await fetchGuests(monitored);
     assert.equal(
       server.requests.filter((entry) => entry.path === '/cluster/resources').length,
       1,
@@ -302,7 +332,7 @@ test('discovery publishes one device per node and one per guest', async () => {
   const server = await startCluster();
   const gladys = createFakeGladys();
   try {
-    const devices = await buildDiscoveredDevices(gladys, configFor(server.port));
+    const { devices } = await discoverDevices(gladys, configFor(server.port));
     assert.deepEqual(
       devices.map((device) => device.name),
       [
@@ -323,7 +353,7 @@ test('polling a node publishes the last backup, its duration and its status', as
   const gladys = createFakeGladys();
   const config = configFor(server.port);
   try {
-    const devices = await buildDiscoveredDevices(gladys, config);
+    const { devices } = await discoverDevices(gladys, config);
     await pollDevice(gladys, config, devices[0]);
 
     assert.equal(gladys.published.length, 3);
@@ -355,7 +385,7 @@ test('a node with no backup publishes "unknown" and leaves the rest unknown', as
   const gladys = createFakeGladys();
   const config = configFor(server.port);
   try {
-    const devices = await buildDiscoveredDevices(gladys, config);
+    const { devices } = await discoverDevices(gladys, config);
     await pollDevice(gladys, config, devices[1]);
 
     assert.equal(gladys.published.length, 1, 'no fake 0 s duration, no fake OFF status');
@@ -374,7 +404,7 @@ test('a failed backup turns the node status feature off', async () => {
   const gladys = createFakeGladys();
   const config = configFor(server.port);
   try {
-    const devices = await buildDiscoveredDevices(gladys, config);
+    const { devices } = await discoverDevices(gladys, config);
     await pollDevice(gladys, config, devices[0]);
     const status = gladys.published.find((state) =>
       state.device_feature_external_id.endsWith(':backup-status'),
@@ -390,7 +420,7 @@ test('polling a guest publishes 1 when it runs, 0 otherwise', async () => {
   const gladys = createFakeGladys();
   const config = configFor(server.port);
   try {
-    const devices = await buildDiscoveredDevices(gladys, config);
+    const { devices } = await discoverDevices(gladys, config);
     const [running, stopped] = devices.slice(2);
 
     await pollDevice(gladys, config, running);
@@ -414,7 +444,7 @@ test('a guest that vanished publishes nothing instead of a fake OFF', async () =
   const gladys = createFakeGladys();
   const config = configFor(server.port);
   try {
-    await buildDiscoveredDevices(gladys, config);
+    await discoverDevices(gladys, config);
     clearGuestsCache();
     gladys.published.length = 0;
     await pollDevice(gladys, config, { external_id: 'ext:proxmox:proxmox-guest:qemu-999' });
@@ -429,7 +459,7 @@ test('refresh_now summarizes the backups and the running guests', async () => {
   const gladys = createFakeGladys();
   const config = configFor(server.port);
   try {
-    await buildDiscoveredDevices(gladys, config);
+    await discoverDevices(gladys, config);
     const message = await refreshNow(gladys, config);
     assert.match(message.en, /Last backup — pve1: .*, 4 min 8 s, OK \| pve2: no backup/);
     assert.match(message.en, /2\/3 VM\/LXC running/);
@@ -498,6 +528,195 @@ test('test_connection reports an empty node filter match', async () => {
   try {
     const message = await testConnection(configFor(server.port, { nodes_filter: 'nope' }));
     assert.match(message.en, /no node matched/);
+  } finally {
+    await server.close();
+  }
+});
+
+// --- Two Proxmox servers -----------------------------------------------------
+
+// The second cluster deliberately reuses the node name and the VMID of the
+// first: a cluster-wide VMID is only unique INSIDE its cluster, and nothing
+// stops two installations from both calling a node `pve1`.
+const SECOND_NODES = [{ node: 'pve1', status: 'online' }];
+const SECOND_RESOURCES = [
+  { id: 'qemu/101', type: 'qemu', vmid: 101, node: 'pve1', name: 'archive', status: 'stopped' },
+];
+
+/**
+ * Start a second fake cluster, on its own port.
+ * @returns {Promise<object>} The fake server.
+ */
+function startSecondCluster() {
+  return startFakeProxmox({
+    '/nodes': SECOND_NODES,
+    '/nodes/pve1/tasks': taskRoute([TASKS[1]]),
+    '/nodes/pve1/status': { uptime: 2000 },
+    '/cluster/resources': SECOND_RESOURCES,
+  });
+}
+
+test('discovery covers both servers, without either colliding with the other', async () => {
+  const first = await startCluster();
+  const second = await startSecondCluster();
+  const gladys = createFakeGladys();
+  try {
+    const { devices, failures } = await discoverDevices(
+      gladys,
+      twoServerConfig(first.port, second.port),
+    );
+    assert.deepEqual(failures, []);
+    assert.deepEqual(
+      devices.map((device) => device.name),
+      [
+        'Proxmox pve1',
+        'Proxmox pve2',
+        'Proxmox nextcloud (101)',
+        'Proxmox dns (200)',
+        'Proxmox windows (300)',
+        'Proxmox 2 pve1',
+        'Proxmox 2 archive (101)',
+      ],
+    );
+    // The first server's ids stay exactly what a single-Proxmox install stored.
+    assert.deepEqual(devices.map((device) => device.external_id).slice(-2), [
+      'ext:proxmox:proxmox-node:2@pve1',
+      'ext:proxmox:proxmox-guest:2@qemu-101',
+    ]);
+    assert.equal(new Set(devices.map((device) => device.external_id)).size, devices.length);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('a device of the second server is polled against the second server', async () => {
+  const first = await startCluster();
+  const second = await startSecondCluster();
+  const gladys = createFakeGladys();
+  const config = twoServerConfig(first.port, second.port);
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    const secondNode = devices.find((device) => device.external_id.endsWith(':2@pve1'));
+    const firstReadsBefore = first.requests.length;
+    gladys.published.length = 0;
+
+    await pollDevice(gladys, config, secondNode);
+
+    assert.equal(first.requests.length, firstReadsBefore, 'the first server must not be read');
+    assert.ok(second.requests.some((entry) => entry.path === '/nodes/pve1/tasks'));
+    assert.deepEqual(
+      gladys.published.map((state) => state.device_feature_external_id),
+      [
+        'ext:proxmox:proxmox-node:2@pve1:last-backup',
+        'ext:proxmox:proxmox-node:2@pve1:backup-status',
+        'ext:proxmox:proxmox-node:2@pve1:backup-duration',
+      ],
+    );
+
+    // The guest of the same VMID reports the state of ITS cluster: stopped
+    // here, running on the first server.
+    gladys.published.length = 0;
+    await pollDevice(gladys, config, { external_id: 'ext:proxmox:proxmox-guest:2@qemu-101' });
+    assert.deepEqual(gladys.published, [
+      { device_feature_external_id: 'ext:proxmox:proxmox-guest:2@qemu-101:status', state: 0 },
+    ]);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('each server keeps its own guest snapshot instead of evicting the other', async () => {
+  const first = await startCluster();
+  const second = await startSecondCluster();
+  const gladys = createFakeGladys();
+  const config = twoServerConfig(first.port, second.port);
+  try {
+    await discoverDevices(gladys, config);
+    const reads = (fake) => fake.requests.filter((entry) => entry.path === '/cluster/resources');
+    const before = [reads(first).length, reads(second).length];
+
+    // One poll round alternating between the two servers: with a single cache
+    // slot, each poll would evict the snapshot the next one needs.
+    await pollDevice(gladys, config, { external_id: 'ext:proxmox:proxmox-guest:qemu-101' });
+    await pollDevice(gladys, config, { external_id: 'ext:proxmox:proxmox-guest:2@qemu-101' });
+    await pollDevice(gladys, config, { external_id: 'ext:proxmox:proxmox-guest:lxc-200' });
+
+    assert.deepEqual([reads(first).length, reads(second).length], before, 'all cache hits');
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('an unreachable second server does not hide the first', async () => {
+  const first = await startCluster();
+  const dead = await startSecondCluster();
+  const deadPort = dead.port;
+  await dead.close();
+  const gladys = createFakeGladys();
+  try {
+    const { devices, failures } = await discoverDevices(
+      gladys,
+      twoServerConfig(first.port, deadPort),
+    );
+    assert.equal(devices.length, 5, 'the first server is published as usual');
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].server.id, 2);
+    assert.match(failures[0].error.message, /Cannot reach/);
+  } finally {
+    await first.close();
+  }
+});
+
+test('a device whose server is gone from the configuration publishes nothing', async () => {
+  const first = await startCluster();
+  const second = await startSecondCluster();
+  const gladys = createFakeGladys();
+  try {
+    await discoverDevices(gladys, twoServerConfig(first.port, second.port));
+    gladys.published.length = 0;
+    // The user emptied the second block: its devices keep their last known
+    // state rather than being refreshed against the wrong server.
+    await pollDevice(gladys, configFor(first.port), {
+      external_id: 'ext:proxmox:proxmox-node:2@pve1',
+    });
+    assert.equal(gladys.published.length, 0);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('refresh_now and test_connection name each server when there are two', async () => {
+  const first = await startCluster();
+  const second = await startSecondCluster();
+  const gladys = createFakeGladys();
+  const config = twoServerConfig(first.port, second.port, { label_2: 'Office' });
+  try {
+    await discoverDevices(gladys, config);
+
+    const refreshed = await refreshNow(gladys, config);
+    assert.match(refreshed.en, /^Refreshed\. \[Proxmox\] Last backup — pve1: /);
+    assert.match(refreshed.en, /\[Office\] Last backup — pve1: /);
+    assert.match(refreshed.en, /\[Office\] .*0\/1 VM\/LXC running/);
+    assert.match(refreshed.fr, /\[Office\] Dernière sauvegarde/);
+
+    const tested = await testConnection(config);
+    assert.match(tested.en, /\[Proxmox\] Connection OK.*3 VM\/LXC visible/);
+    assert.match(tested.en, /\[Office\] Connection OK.*1 VM\/LXC visible/);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('a single server is never labelled: the message stays what it always was', async () => {
+  const server = await startCluster();
+  try {
+    const message = await testConnection(configFor(server.port));
+    assert.ok(!message.en.includes('['), message.en);
   } finally {
     await server.close();
   }

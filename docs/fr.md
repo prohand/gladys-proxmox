@@ -39,6 +39,21 @@ naturel dans Gladys est une scène déclenchée dessus : _quand « Backup status
 sur pve1 s'éteint, préviens-moi_, ou _quand « Status » de ma VM NAS s'éteint,
 préviens-moi_.
 
+### Deux serveurs Proxmox
+
+La configuration comporte **deux blocs identiques** : renseignez le second et
+l'intégration surveille un deuxième Proxmox totalement indépendant — son propre
+hôte, son propre jeton d'API, ses propres réglages TLS et son propre filtre de
+nœuds. Tout ce qui suit (droits, TLS, actions) s'applique à chacun séparément.
+
+Les appareils du second serveur portent son propre nom, donc rien ne se
+télescope : un nœud nommé `pve1` présent sur les deux serveurs apparaît en
+**Proxmox pve1** et **Proxmox 2 pve1**, et une VM 101 sur chacun apparaît deux
+fois également. Renseignez _Nom de ce Proxmox_ dans l'un ou l'autre bloc pour
+les nommer vous-même (`Maison`, `Bureau`…).
+
+Si vous n'avez qu'un seul Proxmox, laissez le second bloc vide : rien ne change.
+
 ---
 
 ## Droits Proxmox nécessaires (lecture seule)
@@ -170,6 +185,7 @@ curl -sS --insecure \
 
 | Champ                                          | Requis | Défaut  | Remarques                                                                                                       |
 | ---------------------------------------------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------- |
+| **Nom de ce Proxmox**                          | non    | Proxmox | Préfixe le nom de chaque appareil de ce serveur. Le second bloc utilise `Proxmox 2` par défaut.                 |
 | **Hôte Proxmox**                               | oui    | —       | IP ou nom d'hôte de n'importe quel nœud — un nœud répond pour tout le cluster.                                  |
 | **Port de l'API**                              | non    | `8006`  | Le port de l'API Proxmox VE.                                                                                    |
 | **Identifiant du jeton d'API**                 | oui    | —       | La forme complète `utilisateur@realm!nomdujeton`, ex. `gladys@pve!tasks`.                                       |
@@ -181,6 +197,12 @@ curl -sS --insecure \
 | **Ce qui compte comme une sauvegarde réussie** | non    | OK seul | Si une sauvegarde terminée en `WARNINGS: n` compte quand même comme réussie.                                    |
 | **Fuseau horaire**                             | non    | hôte    | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                       |
 | **Intervalle de rafraîchissement**             | non    | `300` s | Fréquence de lecture de Proxmox.                                                                                |
+
+Les six premiers champs existent **deux fois** : une fois pour le premier
+Proxmox, une fois pour le second (optionnel). Seuls l'hôte et le jeton du
+premier serveur sont obligatoires. _Ancienneté maximale d'une sauvegarde_, _Ce
+qui compte comme une sauvegarde réussie_, _Fuseau horaire_ et _Intervalle de
+rafraîchissement_ se règlent une seule fois et s'appliquent à tous les serveurs.
 
 ### TLS : le certificat auto-signé de Proxmox
 
@@ -242,6 +264,10 @@ une sauvegarde encore en cours n'est pas encore la dernière sauvegarde.
 - **Rafraîchir maintenant** — lit les sauvegardes et l'état des VM/LXC
   immédiatement, sans attendre le prochain rafraîchissement.
 
+Les deux s'exécutent sur chaque serveur configuré et préfixent chaque résultat
+par `[<nom>]` dès qu'il y en a deux — un message comme
+`[Bureau] Proxmox a refusé le jeton d'API (401)` vous dit lequel corriger.
+
 ## Dépannage
 
 **« Proxmox a refusé le jeton d'API (401) »** — l'identifiant ou le secret est
@@ -278,7 +304,18 @@ le supprimez pas dans Gladys ; l'intégration cesse simplement de publier des
 voir la section TLS ci-dessus.
 
 **« Cannot reach … »** — vérifiez l'hôte et le port (`8006`), et que le
-conteneur Gladys peut joindre le nœud sur votre réseau.
+conteneur Gladys peut joindre le nœud sur votre réseau. Avec deux serveurs
+configurés, le message nomme celui qui n'a pas répondu ; l'autre continue
+d'être rafraîchi normalement.
+
+**Deux appareils portent le même nom** — les deux serveurs utilisent le même
+nom. Renseignez _Nom de ce Proxmox_ dans au moins un des blocs. Renommer un
+serveur change le nom des appareils qu'il découvre ensuite ; ceux que Gladys a
+déjà créés gardent le nom affiché et peuvent être renommés dans Gladys.
+
+**Les appareils de mon second serveur ont disparu du tableau de bord** — vider
+le second bloc arrête sa surveillance, mais ses appareils Gladys restent, figés
+sur leur dernière valeur connue, jusqu'à ce que vous les supprimiez dans Gladys.
 
 **Les horodatages sont décalés de quelques heures** — renseignez le champ
 _Fuseau horaire_ avec votre fuseau IANA (`Europe/Paris`, `America/New_York`…).
