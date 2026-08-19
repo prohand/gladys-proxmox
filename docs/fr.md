@@ -53,6 +53,26 @@ L'usage naturel dans Gladys est une scène déclenchée sur ces textes : _quand
 de ma VM NAS n'est pas « running », préviens-moi_. **Backup duration** est la
 fonctionnalité historisée : c'est celle dont vous pouvez tracer la courbe.
 
+### Plusieurs jobs de sauvegarde
+
+Proxmox est lu **par nœud**, pas par job. Quel que soit le nombre de jobs
+planifiés (les VM à 02:00, les conteneurs à 04:00, un job par stockage…), les
+trois fonctionnalités décrivent toujours la **tâche `vzdump` terminée la plus
+récente de ce nœud**, quel que soit le job qui l'a produite. Un job couvrant des
+invités répartis sur plusieurs nœuds lance une tâche par nœud : chaque appareil
+« nœud » rapporte donc sa part. Et un job encore en cours n'est pas rapporté
+tant qu'il n'est pas terminé — le précédent reste affiché entre-temps.
+
+Ce qui en découle : un job plus tardif écrase le verdict du précédent. Si le job
+de 02:00 échoue et que celui de 04:00 réussit, **Backup status** affiche
+`failed — …` pendant deux heures, puis `OK`. C'est ce que voit une scène
+déclenchée sur le _changement_ du statut — la forme recommandée ici — alors
+qu'une valeur relue une fois par jour à midi ne verrait que le job réussi.
+L'exécution en échec, elle, reste dans le journal des tâches Proxmox.
+
+Il n'y a pas d'appareil par job aujourd'hui : si vous avez besoin de suivre
+chaque job séparément, ouvrez une issue pour le dire.
+
 ### Deux serveurs Proxmox
 
 La configuration comporte **deux blocs identiques** : renseignez le second et
@@ -230,6 +250,11 @@ minute : c'est donc l'intégration qui tient le reste de l'attente. Elle est
 sollicitée chaque minute et ne lit Proxmox que lorsque l'intervalle que vous
 avez réglé est écoulé. Entre deux lectures, rien n'est publié et les valeurs
 déjà affichées restent en place.
+
+Un appareil que vous venez d'ajouter depuis l'onglet Découverte fait exception :
+il est lu immédiatement, et non au prochain tick — il affiche donc sa sauvegarde
+(ou son état) dès son apparition, sans avoir à cliquer sur _Rafraîchir
+maintenant_.
 
 ### TLS : le certificat auto-signé de Proxmox
 

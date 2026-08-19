@@ -64,7 +64,10 @@ holds no Proxmox logic. Three layers below it:
 Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
 `discoverDevices()` (per configured server) → `publishDiscoveredDevices()`;
 `onPoll(device)` → `pollDevice()` → `pollNode()` or `pollGuest()` →
-`publishStates()`.
+`publishStates()`. `onDeviceCreated(device)` takes the same path with
+`{ force: true }`: a discovered device is created with no state at all, and
+waiting for the next tick left it empty on screen right after the user added
+it.
 
 ### Invariants worth keeping
 

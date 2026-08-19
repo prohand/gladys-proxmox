@@ -167,6 +167,10 @@ Gladys only accepts six device poll frequencies, the slowest being one minute,
 so the devices declare that one and `src/poll.js` enforces the configured
 interval itself: a poll arriving early is skipped and publishes nothing, which
 leaves the last known state alone.
+A device the user has just added is read at once instead (`onDeviceCreated`):
+Gladys creates a discovered device with no state, and waiting for the next tick
+left it empty on screen. That forced read still counts as one (`markPolled()`),
+so it does not add a second read a minute later.
 
 A server exists as soon as its host and both token fields are filled in. The
 first server's Gladys external ids are unscoped (`…:proxmox-node:pve1`), the

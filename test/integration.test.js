@@ -427,6 +427,36 @@ test('a poll arriving before the configured interval reads nothing', async () =>
   }
 });
 
+test('a device just added is read at once, without waiting for the next tick', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  const config = configFor(server.port);
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    // Gladys creates a discovered device with no state at all and only polls it
+    // on its next tick: `onDeviceCreated` reads it right away instead, so the
+    // user who has just added it sees a value immediately.
+    await pollDevice(gladys, config, devices[0], { force: true });
+    assert.ok(gladys.published.length > 0, 'the added device gets its states at once');
+
+    // Even inside the interval already consumed by a scheduled poll: the forced
+    // read is the whole point.
+    gladys.published.length = 0;
+    await pollDevice(gladys, config, devices[0], { force: true });
+    assert.ok(gladys.published.length > 0, 'a forced read is never throttled');
+
+    // ...but it counts as a read, so the tick that follows is skipped like any
+    // other early one.
+    const readsBefore = server.requests.length;
+    gladys.published.length = 0;
+    await pollDevice(gladys, config, devices[0]);
+    assert.equal(server.requests.length, readsBefore, 'Proxmox must not be read again');
+    assert.equal(gladys.published.length, 0);
+  } finally {
+    await server.close();
+  }
+});
+
 test('a node with no backup publishes "unknown" and leaves the duration unknown', async () => {
   const server = await startCluster();
   const gladys = createFakeGladys();

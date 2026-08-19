@@ -50,6 +50,26 @@ status" on pve1 is not "OK", notify me_, or _when "Status" of my NAS VM is not
 "running", notify me_. **Backup duration** is the historized one, so it is the
 one you can chart.
 
+### Several backup jobs
+
+Proxmox is read **per node**, not per job. However many jobs you schedule (the
+VMs at 02:00, the containers at 04:00, one job per storage…), the three features
+always describe the **most recent finished `vzdump` task of that node**,
+whichever job produced it. A job covering guests spread over several nodes runs
+one task per node, so each node device reports its own share of it — and a job
+still running is not reported at all until it ends, the previous one staying on
+screen in the meantime.
+
+What follows from it: a later job overwrites the verdict of an earlier one. If
+the 02:00 job fails and the 04:00 one succeeds, **Backup status** reads
+`failed — …` for two hours, then `OK`. That is what a scene triggered on the
+_change_ of the status catches — the recommended shape here — whereas a value
+read once a day at noon would see the successful job only. The failed run itself
+never disappears from the Proxmox task log.
+
+There is no per-job device today: if you need each job followed separately,
+open an issue saying so.
+
 ### Two Proxmox servers
 
 The configuration has **two identical blocks**: fill in the second one and the
@@ -221,6 +241,10 @@ Gladys itself cannot ask for a refresh less often than once a minute, so the
 integration holds the extra wait: it is called every minute and reads Proxmox
 only when the interval you set has elapsed. In between, nothing is published
 and the values already on the dashboard stay as they are.
+
+A device you have just added from the Discovery tab is the exception: it is read
+right away rather than at the next tick, so it carries its backup — or its
+status — as soon as it appears, without you pressing _Refresh now_.
 
 ### TLS: the self-signed Proxmox certificate
 
