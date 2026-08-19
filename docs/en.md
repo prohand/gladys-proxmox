@@ -1,9 +1,8 @@
 # Proxmox
 
-Monitor the **failed tasks** of your Proxmox VE nodes from Gladys: a failed
-task counter per node, and the details of the recent failures (task type,
-start and end timestamps in your local time zone, and the status Proxmox
-recorded).
+Monitor the **backups** of your Proxmox VE nodes from Gladys — when the last one
+ran, how long it took and whether it succeeded — plus the **running state of
+every virtual machine and LXC container**.
 
 This integration is **strictly read-only**. It performs `GET` requests on the
 Proxmox VE API and nothing else — it never starts, stops, migrates, deletes or
@@ -12,67 +11,73 @@ reconfigures anything.
 ## What you get
 
 After installation, one Gladys device appears per Proxmox node, named
-`Proxmox <node>`. Each device carries two read-only features:
+`Proxmox <node>`, carrying three read-only features about its **last backup**
+(a Proxmox `vzdump` task):
 
-| Feature                    | Type           | What it holds                                                                                                                                                           |
-| -------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Failed tasks (N h)**     | Integer sensor | How many tasks failed on that node inside the observation window. Kept in history, so you can chart it and trigger scenes on it.                                        |
-| **Recent failure details** | Text           | One block per recent failure: task type (and the guest it acted on), start → end timestamps in your time zone, how long it ran, and the status string Proxmox recorded. |
+| Feature             | Type           | What it holds                                                                                                                             |
+| ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Last backup**     | Text           | When the last backup started, in your time zone — e.g. `2026-08-19 02:00:00 (Europe/Paris)`. Holds `unknown` when the node has no backup. |
+| **Backup duration** | Integer sensor | How long that backup ran, in seconds. Kept in history, so you can chart it and trigger scenes on it.                                      |
+| **Backup status**   | Binary sensor  | **On** when that backup succeeded, **off** for any other state.                                                                           |
 
-Example of what the details feature holds:
+And one Gladys device per virtual machine and per LXC container, named
+`Proxmox <name> (<vmid>)`:
 
-```
-2 failed tasks on pve1 in the last 24 h (times in Europe/Paris):
-• vzdump (101)
-  2026-08-19 02:00:00 → 2026-08-19 02:04:08 (4 min 8 s)
-  status: command 'lvcreate' failed: exit code 5
-• qmigrate (110)
-  2026-08-19 09:12:31 → 2026-08-19 09:13:02 (31 s)
-  status: no such logical volume pve/data
-```
+| Feature    | Type          | What it holds                                                    |
+| ---------- | ------------- | ---------------------------------------------------------------- |
+| **Status** | Binary sensor | **On** when the guest is `running`, **off** for any other state. |
 
-Because the counter keeps history, the natural Gladys usage is a scene
-triggered on it: _when "Failed tasks" on pve1 becomes greater than 0, send me
-the "Recent failure details" text_.
+A node with no backup inside the observation window publishes `unknown` on
+**Last backup**, and leaves **Backup duration** and **Backup status** unknown
+rather than showing a `0 s` backup that never happened. Templates never become
+devices, and a guest that disappears (deleted, or no longer visible to the
+token) keeps its last known state instead of being turned off.
+
+Because the duration and both binary features keep history, the natural Gladys
+usage is a scene triggered on them: _when "Backup status" on pve1 becomes off,
+notify me_, or _when "Status" of my NAS VM becomes off, notify me_.
 
 ---
 
 ## Required Proxmox permissions (read-only)
 
-This is the part worth getting right. The integration needs **one privilege**,
-and it is an audit (read) privilege:
+This is the part worth getting right. The integration needs **two audit (read)
+privileges**, and nothing else:
 
-| Privilege     | On path           | Why                                                    |
-| ------------- | ----------------- | ------------------------------------------------------ |
-| **Sys.Audit** | `/nodes` (or `/`) | Read the task log of the nodes, and read their status. |
+| Privilege     | On path           | Why                                                       |
+| ------------- | ----------------- | --------------------------------------------------------- |
+| **Sys.Audit** | `/nodes` (or `/`) | Read the task log of the nodes, and read their status.    |
+| **VM.Audit**  | `/vms` (or `/`)   | See the virtual machines and containers, and their state. |
 
-Nothing else. No `VM.*`, no `Datastore.*`, no `Sys.Modify`, no `Sys.Console`,
-no root access, no shell access.
+Nothing else. No `Datastore.*`, no `Sys.Modify`, no `VM.PowerMgmt`, no
+`Sys.Console`, no root access, no shell access.
 
 ### Which endpoints are called
 
-| Endpoint                         | Method | Privilege required               |
-| -------------------------------- | ------ | -------------------------------- |
-| `/api2/json/nodes`               | GET    | none (any authenticated token)   |
-| `/api2/json/nodes/{node}/tasks`  | GET    | `Sys.Audit` on `/nodes/{node}` * |
-| `/api2/json/nodes/{node}/status` | GET    | `Sys.Audit` on `/nodes/{node}`   |
+| Endpoint                               | Method | Privilege required                |
+| -------------------------------------- | ------ | --------------------------------- |
+| `/api2/json/nodes`                     | GET    | none (any authenticated token)    |
+| `/api2/json/nodes/{node}/tasks`        | GET    | `Sys.Audit` on `/nodes/{node}` \* |
+| `/api2/json/nodes/{node}/status`       | GET    | `Sys.Audit` on `/nodes/{node}`    |
+| `/api2/json/cluster/resources?type=vm` | GET    | `VM.Audit` on `/vms/{vmid}` \*    |
 
-\* **Important subtlety.** The task list is _permission-filtered_, not
+\* **Important subtlety.** Both lists are _permission-filtered_, not
 permission-refused. Without `Sys.Audit` on `/nodes/{node}`, Proxmox answers
 `200 OK` with only the tasks the token itself started — which, for a token that
-never starts anything, is an empty list. So an under-privileged setup does not
-look broken: the counter simply stays at `0` forever. That is why the
-**Test the connection** button probes `/nodes/{node}/status` (which _does_
-return `403`) and tells you exactly which nodes are missing the privilege.
+never starts anything, is an empty list. Without `VM.Audit`, the guest list
+comes back empty the same way. So an under-privileged setup does not look
+broken: the backup features simply stay `unknown` forever, and no VM appears.
+That is why the **Test the connection** button probes `/nodes/{node}/status`
+(which _does_ return `403`) and tells you exactly which nodes are missing the
+privilege, and how many guests the token can actually see.
 
 ### Option A — the built-in `PVEAuditor` role (simplest)
 
-`PVEAuditor` is Proxmox's own read-only role. It grants `Sys.Audit` plus the
-other audit privileges (`VM.Audit`, `Datastore.Audit`, `Pool.Audit`,
+`PVEAuditor` is Proxmox's own read-only role. It grants `Sys.Audit` and
+`VM.Audit` plus the other audit privileges (`Datastore.Audit`, `Pool.Audit`,
 `SDN.Audit`, `Mapping.Audit`, `VM.GuestAgent.Audit`). It is read-only by
-construction — it contains no `*.Modify`, no `*.Allocate`, no
-`*.PowerMgmt`, no `Sys.Console` — but it is broader than what this integration
-uses.
+construction — it contains no `*.Modify`, no `*.Allocate`, no `*.PowerMgmt`, no
+`Sys.Console` — but it is broader than what this integration uses.
 
 In the Proxmox web UI:
 
@@ -80,38 +85,43 @@ In the Proxmox web UI:
    - User name: `gladys`, Realm: `Proxmox VE authentication server (pve)`
    - Set a password (it is never used by the integration, but Proxmox requires one)
 2. **Datacenter → Permissions → Add → User Permission**
-   - Path: `/nodes` — User: `gladys@pve` — Role: `PVEAuditor` — Propagate: ✔
+   - Path: `/` — User: `gladys@pve` — Role: `PVEAuditor` — Propagate: ✔
 3. **Datacenter → Permissions → API Tokens → Add**
    - User: `gladys@pve` — Token ID: `tasks`
    - **Privilege Separation: keep it checked** (see the note below)
    - Proxmox now shows the secret **once** — copy it, it is never shown again
 4. **Datacenter → Permissions → Add → API Token Permission**
-   - Path: `/nodes` — API Token: `gladys@pve!tasks` — Role: `PVEAuditor` — Propagate: ✔
+   - Path: `/` — API Token: `gladys@pve!tasks` — Role: `PVEAuditor` — Propagate: ✔
 
 Or, from a shell on any node:
 
 ```bash
 pveum user add gladys@pve --password "$(openssl rand -base64 24)"
-pveum acl modify /nodes --users gladys@pve --roles PVEAuditor
+pveum acl modify / --users gladys@pve --roles PVEAuditor
 
 # Prints the secret once — copy it into Gladys.
 pveum user token add gladys@pve tasks --privsep 1
-pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles PVEAuditor
+pveum acl modify / --tokens 'gladys@pve!tasks' --roles PVEAuditor
 ```
+
+Granting on `/` (rather than on `/nodes` and `/vms` separately) is the simplest
+form and stays read-only: the role itself is what limits the token.
 
 ### Option B — a minimal custom role (least privilege)
 
 If you would rather grant only what is actually used, create a role holding
-`Sys.Audit` and nothing else:
+`Sys.Audit` and `VM.Audit` and nothing else:
 
 ```bash
-pveum role add GladysTaskAudit --privs "Sys.Audit"
+pveum role add GladysBackupAudit --privs "Sys.Audit,VM.Audit"
 
 pveum user add gladys@pve --password "$(openssl rand -base64 24)"
-pveum acl modify /nodes --users gladys@pve --roles GladysTaskAudit
+pveum acl modify /nodes --users gladys@pve --roles GladysBackupAudit
+pveum acl modify /vms   --users gladys@pve --roles GladysBackupAudit
 
 pveum user token add gladys@pve tasks --privsep 1
-pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles GladysTaskAudit
+pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles GladysBackupAudit
+pveum acl modify /vms   --tokens 'gladys@pve!tasks' --roles GladysBackupAudit
 ```
 
 This is the tightest configuration the integration can run on.
@@ -120,47 +130,50 @@ This is the tightest configuration the integration can run on.
 
 When a token is created with **privilege separation** (`--privsep 1`, the
 default and the recommended setting), its effective permissions are the
-**intersection** of the user's permissions and the token's own ACL. So the two
-`pveum acl modify` lines above are both needed: one for the user, one for the
+**intersection** of the user's permissions and the token's own ACL. So the
+`pveum acl modify` lines above are all needed: some for the user, some for the
 token.
 
 Creating the token with `--privsep 0` makes it inherit the user's permissions
-directly and skips the second ACL — but it also means the token can do
+directly and skips the token ACLs — but it also means the token can do
 everything the user can, forever. Prefer privilege separation.
 
 ### Verifying
 
 Use the **Test the connection** button in the integration's Configuration tab.
-It reports, node by node, whether the token can actually read the task log, and
-names the missing privilege when it cannot.
+It reports, node by node, whether the token can actually read the task log, how
+many VMs and containers it can see, and names the missing privilege when
+something is denied.
 
 You can also check by hand:
 
 ```bash
 curl -sS --insecure \
   -H "Authorization: PVEAPIToken=gladys@pve!tasks=YOUR-SECRET" \
-  "https://192.168.1.10:8006/api2/json/nodes/pve1/tasks?errors=1&limit=5"
+  "https://192.168.1.10:8006/api2/json/nodes/pve1/tasks?typefilter=vzdump&limit=5"
+
+curl -sS --insecure \
+  -H "Authorization: PVEAPIToken=gladys@pve!tasks=YOUR-SECRET" \
+  "https://192.168.1.10:8006/api2/json/cluster/resources?type=vm"
 ```
 
 ---
 
 ## Configuration
 
-| Field                           | Required | Default | Notes                                                                                      |
-| ------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
-| **Proxmox host**                | yes      | —       | IP or hostname of any node — one node answers for the whole cluster.                       |
-| **API port**                    | no       | `8006`  | The Proxmox VE API port.                                                                   |
-| **API token ID**                | yes      | —       | The full `user@realm!tokenname` form, e.g. `gladys@pve!tasks`.                             |
-| **API token secret**            | yes      | —       | The value Proxmox shows once. Stored encrypted by Gladys, never sent back to your browser. |
-| **TLS certificate fingerprint** | no       | empty   | SHA-256 fingerprint of the node certificate. See below.                                    |
-| **Verify the TLS certificate**  | no       | on      | Leave on. See below.                                                                       |
-| **Nodes to monitor**            | no       | all     | Comma-separated node names, e.g. `pve1, pve2`.                                             |
-| **Observation window**          | no       | `24` h  | Only tasks started inside this window are counted and listed.                              |
-| **What counts as a failure**    | no       | errors  | Whether tasks that ended with `WARNINGS: n` count as failures.                             |
-| **Task types to keep**          | no       | all     | Comma-separated Proxmox task types, e.g. `vzdump, replication`.                            |
-| **Failures detailed**           | no       | `5`     | How many failures the details text describes (the counter always covers the whole window). |
-| **Time zone**                   | no       | host    | IANA zone used to render the timestamps, e.g. `Europe/Paris`.                              |
-| **Refresh interval**            | no       | `300` s | How often the task log is read.                                                            |
+| Field                                  | Required | Default | Notes                                                                                      |
+| -------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
+| **Proxmox host**                       | yes      | —       | IP or hostname of any node — one node answers for the whole cluster.                       |
+| **API port**                           | no       | `8006`  | The Proxmox VE API port.                                                                   |
+| **API token ID**                       | yes      | —       | The full `user@realm!tokenname` form, e.g. `gladys@pve!tasks`.                             |
+| **API token secret**                   | yes      | —       | The value Proxmox shows once. Stored encrypted by Gladys, never sent back to your browser. |
+| **TLS certificate fingerprint**        | no       | empty   | SHA-256 fingerprint of the node certificate. See below.                                    |
+| **Verify the TLS certificate**         | no       | on      | Leave on. See below.                                                                       |
+| **Nodes to monitor**                   | no       | all     | Comma-separated node names, e.g. `pve1, pve2`. Also scopes the VMs/LXC reported.           |
+| **How far back to look for a backup**  | no       | `7` d   | The last backup is searched inside this window.                                            |
+| **What counts as a successful backup** | no       | OK only | Whether a backup that ended with `WARNINGS: n` still counts as successful.                 |
+| **Time zone**                          | no       | host    | IANA zone used to render the timestamp, e.g. `Europe/Paris`.                               |
+| **Refresh interval**                   | no       | `300` s | How often Proxmox is read.                                                                 |
 
 ### TLS: the self-signed Proxmox certificate
 
@@ -192,30 +205,30 @@ container trusts. You have three options, best first:
    only: the traffic stays encrypted, but nothing proves the server you reach
    is really your node — and the API token secret travels on that connection.
 
-### What counts as a failure
+### What counts as a successful backup
 
-Proxmox records a finished task with one of these statuses:
+Proxmox records a finished backup with one of these statuses:
 
-| Proxmox status | Meaning                         | Counted with "Errors only" | Counted with "Errors and warnings" |
-| -------------- | ------------------------------- | -------------------------- | ---------------------------------- |
-| `OK`           | success                         | no                         | no                                 |
-| `WARNINGS: 3`  | finished, with warnings         | no                         | **yes**                            |
-| anything else  | error string                    | **yes**                    | **yes**                            |
-| _(empty)_      | no exit status — worker crashed | **yes**                    | **yes**                            |
+| Proxmox status | Meaning                         | "OK only" (default) | "OK and warnings" |
+| -------------- | ------------------------------- | ------------------- | ----------------- |
+| `OK`           | success                         | **on**              | **on**            |
+| `WARNINGS: 3`  | finished, with warnings         | off                 | **on**            |
+| anything else  | error string                    | off                 | off               |
+| _(empty)_      | no exit status — worker crashed | off                 | off               |
 
 A backup that completed but skipped a guest ends in `WARNINGS: n`. Choose
-_Errors and warnings_ if you want to hear about those too.
+_OK and warnings_ if you consider those good enough.
 
-Only **finished** tasks are read (Proxmox's archived task list): a task still
-running is not a failure and is never counted.
+Only **finished** backups are read (Proxmox's archived task list): a backup
+still running is not the last backup yet.
 
 ## Actions
 
 - **Test the connection** — checks that the host answers, that the API token is
-  accepted, and that it can actually read the task log of every monitored node.
-  Run this first whenever something looks wrong.
-- **Refresh now** — reads the task log immediately, on every node, instead of
-  waiting for the next refresh.
+  accepted, that it can actually read the task log of every monitored node, and
+  how many VMs/LXC it can see. Run this first whenever something looks wrong.
+- **Refresh now** — reads the backups and the VM/LXC states immediately, instead
+  of waiting for the next refresh.
 
 ## Troubleshooting
 
@@ -229,11 +242,24 @@ new one: Proxmox only shows it once.
 privilege separation on, remember that _both_ the user and the token need the
 ACL.
 
-**The counter stays at 0 while the Proxmox UI shows failures** — almost always
-the same missing privilege. Run **Test the connection**. If it reports OK,
-check the observation window (a failure older than the window is not counted),
-the _Task types to keep_ filter, and whether the failures you are looking at
-are `WARNINGS:` ones excluded by the default scope.
+**"No VM or LXC is visible"** — the token is missing `VM.Audit` (on `/vms`, or
+on `/`). The guest list is filtered rather than refused, so an under-privileged
+token simply sees nothing.
+
+**"Last backup" stays `unknown` while the Proxmox UI shows backups** — either
+the missing `Sys.Audit` privilege above (run **Test the connection**), or a
+window shorter than your backup schedule: a node backed up every two weeks
+reports nothing with the default 7-day window. Raise _How far back to look for
+a backup_.
+
+**"Backup status" is off while the backup looks fine** — the backup probably
+ended in `WARNINGS: n` (a guest was skipped, a hook returned non-zero…). Open
+the task in the Proxmox UI to see why, or switch _What counts as a successful
+backup_ to _OK and warnings_.
+
+**A VM I deleted is still listed** — the Gladys device stays until you delete
+it in Gladys; the integration stops publishing states for it, so it simply
+freezes on its last value.
 
 **"Proxmox presents a self-signed certificate"** — pin its fingerprint, see the
 TLS section above.

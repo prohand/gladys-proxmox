@@ -21,21 +21,18 @@ export const DEFAULT_CONFIG = {
   tls_fingerprint: '',
   tls_verify: true,
   nodes_filter: '',
-  lookback_hours: 24,
-  failure_scope: 'errors', // 'errors' | 'errors_and_warnings'
-  task_type_filter: '',
-  max_failures_listed: 5,
+  backup_lookback_days: 7,
+  backup_success_scope: 'ok_only', // 'ok_only' | 'ok_and_warnings'
   timezone: '',
   poll_frequency: 300,
 };
 
 // Bounds mirrored from the manifest, applied here too: the form enforces them
 // on the way in, this keeps a hand-edited value from producing a nonsensical
-// request (a 0 s poll frequency, a 10 000 h window...).
+// request (a 0 s poll frequency, a 10 000 day window...).
 const BOUNDS = {
   port: [1, 65535],
-  lookback_hours: [1, 720],
-  max_failures_listed: [1, 20],
+  backup_lookback_days: [1, 365],
   poll_frequency: [60, 3600],
 };
 
@@ -89,10 +86,9 @@ export function normalizeConfig(raw = {}) {
     // never silently downgrade the TLS check.
     tls_verify: raw.tls_verify !== false,
     nodes_filter: String(raw.nodes_filter ?? DEFAULT_CONFIG.nodes_filter).trim(),
-    lookback_hours: normalizeNumber(raw.lookback_hours, 'lookback_hours'),
-    failure_scope: raw.failure_scope === 'errors_and_warnings' ? 'errors_and_warnings' : 'errors',
-    task_type_filter: String(raw.task_type_filter ?? DEFAULT_CONFIG.task_type_filter).trim(),
-    max_failures_listed: normalizeNumber(raw.max_failures_listed, 'max_failures_listed'),
+    backup_lookback_days: normalizeNumber(raw.backup_lookback_days, 'backup_lookback_days'),
+    backup_success_scope:
+      raw.backup_success_scope === 'ok_and_warnings' ? 'ok_and_warnings' : 'ok_only',
     timezone: String(raw.timezone ?? DEFAULT_CONFIG.timezone).trim(),
     poll_frequency: normalizeNumber(raw.poll_frequency, 'poll_frequency'),
   };

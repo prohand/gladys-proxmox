@@ -1,9 +1,8 @@
 # Proxmox
 
-Surveillez les **tâches en échec** de vos nœuds Proxmox VE depuis Gladys : un
-compteur d'échecs par nœud, et le détail des échecs récents (type de tâche,
-horodatages de début et de fin dans votre fuseau horaire, et statut enregistré
-par Proxmox).
+Surveillez les **sauvegardes** de vos nœuds Proxmox VE depuis Gladys — quand la
+dernière a eu lieu, combien de temps elle a duré et si elle a réussi — ainsi que
+l'**état de marche de chaque machine virtuelle et conteneur LXC**.
 
 Cette intégration est **strictement en lecture seule**. Elle n'effectue que des
 requêtes `GET` sur l'API Proxmox VE — elle ne démarre, n'arrête, ne migre, ne
@@ -12,65 +11,75 @@ supprime et ne reconfigure jamais quoi que ce soit.
 ## Ce que vous obtenez
 
 Après l'installation, un appareil Gladys apparaît par nœud Proxmox, nommé
-`Proxmox <nœud>`. Chaque appareil porte deux fonctionnalités en lecture seule :
+`Proxmox <nœud>`, portant trois fonctionnalités en lecture seule décrivant sa
+**dernière sauvegarde** (une tâche `vzdump` Proxmox) :
 
-| Fonctionnalité             | Type           | Contenu                                                                                                                                                             |
-| -------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Failed tasks (N h)**     | Capteur entier | Nombre de tâches en échec sur ce nœud dans la fenêtre d'observation. Historisé : vous pouvez en tracer la courbe et déclencher des scènes dessus.                   |
-| **Recent failure details** | Texte          | Un bloc par échec récent : type de tâche (et l'invité concerné), horodatages début → fin dans votre fuseau, durée d'exécution, et le statut enregistré par Proxmox. |
+| Fonctionnalité      | Type            | Contenu                                                                                                                                    |
+| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Last backup**     | Texte           | Le début de la dernière sauvegarde, dans votre fuseau — ex. `2026-08-19 02:00:00 (Europe/Paris)`. Vaut `unknown` si le nœud n'en a aucune. |
+| **Backup duration** | Capteur entier  | La durée de cette sauvegarde, en secondes. Historisée : vous pouvez en tracer la courbe et déclencher des scènes dessus.                   |
+| **Backup status**   | Capteur binaire | **Allumé** si cette sauvegarde a réussi, **éteint** dans tout autre cas.                                                                   |
 
-Exemple de ce que contient la fonctionnalité de détail :
+Et un appareil Gladys par machine virtuelle et par conteneur LXC, nommé
+`Proxmox <nom> (<vmid>)` :
 
-```
-2 failed tasks on pve1 in the last 24 h (times in Europe/Paris):
-• vzdump (101)
-  2026-08-19 02:00:00 → 2026-08-19 02:04:08 (4 min 8 s)
-  status: command 'lvcreate' failed: exit code 5
-• qmigrate (110)
-  2026-08-19 09:12:31 → 2026-08-19 09:13:02 (31 s)
-  status: no such logical volume pve/data
-```
+| Fonctionnalité | Type            | Contenu                                                               |
+| -------------- | --------------- | --------------------------------------------------------------------- |
+| **Status**     | Capteur binaire | **Allumé** si l'invité est `running`, **éteint** dans tout autre cas. |
 
-Le compteur étant historisé, l'usage naturel dans Gladys est une scène
-déclenchée dessus : _quand « Failed tasks » sur pve1 devient supérieur à 0,
-envoie-moi le texte « Recent failure details »_.
+Un nœud sans sauvegarde dans la fenêtre d'observation publie `unknown` sur
+**Last backup**, et laisse **Backup duration** et **Backup status** inconnus
+plutôt que d'afficher une sauvegarde de `0 s` qui n'a jamais eu lieu. Les
+modèles (templates) ne deviennent jamais des appareils, et un invité qui
+disparaît (supprimé, ou plus visible par le jeton) conserve son dernier état
+connu au lieu d'être éteint artificiellement.
+
+La durée et les deux fonctionnalités binaires étant historisées, l'usage
+naturel dans Gladys est une scène déclenchée dessus : _quand « Backup status »
+sur pve1 s'éteint, préviens-moi_, ou _quand « Status » de ma VM NAS s'éteint,
+préviens-moi_.
 
 ---
 
 ## Droits Proxmox nécessaires (lecture seule)
 
-C'est le point à ne pas rater. L'intégration a besoin d'**un seul privilège**,
-et c'est un privilège d'audit (lecture) :
+C'est le point à ne pas rater. L'intégration a besoin de **deux privilèges
+d'audit (lecture)**, et de rien d'autre :
 
-| Privilège     | Sur le chemin     | Pourquoi                                                   |
-| ------------- | ----------------- | ---------------------------------------------------------- |
-| **Sys.Audit** | `/nodes` (ou `/`) | Lire le journal des tâches des nœuds, et lire leur statut. |
+| Privilège     | Sur le chemin     | Pourquoi                                                      |
+| ------------- | ----------------- | ------------------------------------------------------------- |
+| **Sys.Audit** | `/nodes` (ou `/`) | Lire le journal des tâches des nœuds, et lire leur statut.    |
+| **VM.Audit**  | `/vms` (ou `/`)   | Voir les machines virtuelles et les conteneurs, et leur état. |
 
-Rien d'autre. Aucun `VM.*`, aucun `Datastore.*`, aucun `Sys.Modify`, aucun
-`Sys.Console`, aucun accès root, aucun accès shell.
+Rien d'autre. Aucun `Datastore.*`, aucun `Sys.Modify`, aucun `VM.PowerMgmt`,
+aucun `Sys.Console`, aucun accès root, aucun accès shell.
 
 ### Points d'API appelés
 
-| Point d'API                      | Méthode | Privilège requis                  |
-| -------------------------------- | ------- | --------------------------------- |
-| `/api2/json/nodes`               | GET     | aucun (tout jeton authentifié)    |
-| `/api2/json/nodes/{node}/tasks`  | GET     | `Sys.Audit` sur `/nodes/{node}` * |
-| `/api2/json/nodes/{node}/status` | GET     | `Sys.Audit` sur `/nodes/{node}`   |
+| Point d'API                            | Méthode | Privilège requis                   |
+| -------------------------------------- | ------- | ---------------------------------- |
+| `/api2/json/nodes`                     | GET     | aucun (tout jeton authentifié)     |
+| `/api2/json/nodes/{node}/tasks`        | GET     | `Sys.Audit` sur `/nodes/{node}` \* |
+| `/api2/json/nodes/{node}/status`       | GET     | `Sys.Audit` sur `/nodes/{node}`    |
+| `/api2/json/cluster/resources?type=vm` | GET     | `VM.Audit` sur `/vms/{vmid}` \*    |
 
-\* **Subtilité importante.** La liste des tâches est _filtrée_ par les droits,
-elle n'est pas _refusée_. Sans `Sys.Audit` sur `/nodes/{node}`, Proxmox répond
-`200 OK` en ne renvoyant que les tâches lancées par le jeton lui-même — ce qui,
-pour un jeton qui ne lance jamais rien, donne une liste vide. Une configuration
-sous-privilégiée n'a donc pas l'air cassée : le compteur reste simplement à `0`
-indéfiniment. C'est la raison d'être du bouton **Tester la connexion** : il
-interroge `/nodes/{node}/status` (qui, lui, renvoie bien `403`) et vous indique
-précisément quels nœuds manquent du privilège.
+\* **Subtilité importante.** Ces deux listes sont _filtrées_ par les droits,
+elles ne sont pas _refusées_. Sans `Sys.Audit` sur `/nodes/{node}`, Proxmox
+répond `200 OK` en ne renvoyant que les tâches lancées par le jeton lui-même —
+ce qui, pour un jeton qui ne lance jamais rien, donne une liste vide. Sans
+`VM.Audit`, la liste des invités revient vide de la même façon. Une
+configuration sous-privilégiée n'a donc pas l'air cassée : les fonctionnalités
+de sauvegarde restent simplement `unknown` indéfiniment, et aucune VM
+n'apparaît. C'est la raison d'être du bouton **Tester la connexion** : il
+interroge `/nodes/{node}/status` (qui, lui, renvoie bien `403`), vous indique
+précisément quels nœuds manquent du privilège, et combien d'invités le jeton
+voit réellement.
 
 ### Option A — le rôle intégré `PVEAuditor` (le plus simple)
 
 `PVEAuditor` est le rôle en lecture seule fourni par Proxmox. Il accorde
-`Sys.Audit` ainsi que les autres privilèges d'audit (`VM.Audit`,
-`Datastore.Audit`, `Pool.Audit`, `SDN.Audit`, `Mapping.Audit`,
+`Sys.Audit` et `VM.Audit` ainsi que les autres privilèges d'audit
+(`Datastore.Audit`, `Pool.Audit`, `SDN.Audit`, `Mapping.Audit`,
 `VM.GuestAgent.Audit`). Il est en lecture seule par construction — il ne
 contient aucun `*.Modify`, aucun `*.Allocate`, aucun `*.PowerMgmt`, aucun
 `Sys.Console` — mais il est plus large que ce que cette intégration utilise.
@@ -81,38 +90,43 @@ Dans l'interface web Proxmox :
    - Nom d'utilisateur : `gladys`, Domaine : `Proxmox VE authentication server (pve)`
    - Définissez un mot de passe (jamais utilisé par l'intégration, mais Proxmox en exige un)
 2. **Datacenter → Permissions → Ajouter → Permission utilisateur**
-   - Chemin : `/nodes` — Utilisateur : `gladys@pve` — Rôle : `PVEAuditor` — Propager : ✔
+   - Chemin : `/` — Utilisateur : `gladys@pve` — Rôle : `PVEAuditor` — Propager : ✔
 3. **Datacenter → Permissions → Jetons d'API → Ajouter**
    - Utilisateur : `gladys@pve` — ID du jeton : `tasks`
    - **Séparation des privilèges : laissez la case cochée** (voir la note plus bas)
    - Proxmox affiche alors le secret **une seule fois** — copiez-le, il ne sera plus jamais affiché
 4. **Datacenter → Permissions → Ajouter → Permission de jeton d'API**
-   - Chemin : `/nodes` — Jeton d'API : `gladys@pve!tasks` — Rôle : `PVEAuditor` — Propager : ✔
+   - Chemin : `/` — Jeton d'API : `gladys@pve!tasks` — Rôle : `PVEAuditor` — Propager : ✔
 
 Ou, depuis un shell sur n'importe quel nœud :
 
 ```bash
 pveum user add gladys@pve --password "$(openssl rand -base64 24)"
-pveum acl modify /nodes --users gladys@pve --roles PVEAuditor
+pveum acl modify / --users gladys@pve --roles PVEAuditor
 
 # Affiche le secret une seule fois — copiez-le dans Gladys.
 pveum user token add gladys@pve tasks --privsep 1
-pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles PVEAuditor
+pveum acl modify / --tokens 'gladys@pve!tasks' --roles PVEAuditor
 ```
+
+Accorder sur `/` (plutôt que sur `/nodes` et `/vms` séparément) est la forme la
+plus simple et reste en lecture seule : c'est le rôle qui limite le jeton.
 
 ### Option B — un rôle personnalisé minimal (moindre privilège)
 
 Si vous préférez n'accorder que ce qui est réellement utilisé, créez un rôle ne
-contenant que `Sys.Audit` :
+contenant que `Sys.Audit` et `VM.Audit` :
 
 ```bash
-pveum role add GladysTaskAudit --privs "Sys.Audit"
+pveum role add GladysBackupAudit --privs "Sys.Audit,VM.Audit"
 
 pveum user add gladys@pve --password "$(openssl rand -base64 24)"
-pveum acl modify /nodes --users gladys@pve --roles GladysTaskAudit
+pveum acl modify /nodes --users gladys@pve --roles GladysBackupAudit
+pveum acl modify /vms   --users gladys@pve --roles GladysBackupAudit
 
 pveum user token add gladys@pve tasks --privsep 1
-pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles GladysTaskAudit
+pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles GladysBackupAudit
+pveum acl modify /vms   --tokens 'gladys@pve!tasks' --roles GladysBackupAudit
 ```
 
 C'est la configuration la plus restrictive sur laquelle l'intégration peut
@@ -123,11 +137,11 @@ fonctionner.
 Quand un jeton est créé avec la **séparation des privilèges** (`--privsep 1`,
 la valeur par défaut et celle recommandée), ses droits effectifs sont
 l'**intersection** des droits de l'utilisateur et de l'ACL propre au jeton. Les
-deux lignes `pveum acl modify` ci-dessus sont donc toutes les deux nécessaires :
-une pour l'utilisateur, une pour le jeton.
+lignes `pveum acl modify` ci-dessus sont donc toutes nécessaires : certaines
+pour l'utilisateur, d'autres pour le jeton.
 
 Créer le jeton avec `--privsep 0` lui fait hériter directement des droits de
-l'utilisateur et évite la seconde ACL — mais cela signifie aussi que le jeton
+l'utilisateur et évite les ACL de jeton — mais cela signifie aussi que le jeton
 peut tout ce que l'utilisateur peut, définitivement. Préférez la séparation des
 privilèges.
 
@@ -135,35 +149,38 @@ privilèges.
 
 Utilisez le bouton **Tester la connexion** dans l'onglet Configuration de
 l'intégration. Il indique, nœud par nœud, si le jeton peut réellement lire le
-journal des tâches, et nomme le privilège manquant le cas échéant.
+journal des tâches, combien de VM et de conteneurs il voit, et nomme le
+privilège manquant le cas échéant.
 
 Vous pouvez aussi vérifier à la main :
 
 ```bash
 curl -sS --insecure \
   -H "Authorization: PVEAPIToken=gladys@pve!tasks=VOTRE-SECRET" \
-  "https://192.168.1.10:8006/api2/json/nodes/pve1/tasks?errors=1&limit=5"
+  "https://192.168.1.10:8006/api2/json/nodes/pve1/tasks?typefilter=vzdump&limit=5"
+
+curl -sS --insecure \
+  -H "Authorization: PVEAPIToken=gladys@pve!tasks=VOTRE-SECRET" \
+  "https://192.168.1.10:8006/api2/json/cluster/resources?type=vm"
 ```
 
 ---
 
 ## Configuration
 
-| Champ                              | Requis | Défaut  | Remarques                                                                                                       |
-| ---------------------------------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------- |
-| **Hôte Proxmox**                   | oui    | —       | IP ou nom d'hôte de n'importe quel nœud — un nœud répond pour tout le cluster.                                  |
-| **Port de l'API**                  | non    | `8006`  | Le port de l'API Proxmox VE.                                                                                    |
-| **Identifiant du jeton d'API**     | oui    | —       | La forme complète `utilisateur@realm!nomdujeton`, ex. `gladys@pve!tasks`.                                       |
-| **Secret du jeton d'API**          | oui    | —       | La valeur affichée une seule fois par Proxmox. Stockée chiffrée par Gladys, jamais renvoyée à votre navigateur. |
-| **Empreinte du certificat TLS**    | non    | vide    | Empreinte SHA-256 du certificat du nœud. Voir plus bas.                                                         |
-| **Vérifier le certificat TLS**     | non    | activé  | À laisser activé. Voir plus bas.                                                                                |
-| **Nœuds à surveiller**             | non    | tous    | Noms séparés par des virgules, ex. `pve1, pve2`.                                                                |
-| **Fenêtre d'observation**          | non    | `24` h  | Seules les tâches démarrées dans cette fenêtre sont comptées et listées.                                        |
-| **Ce qui compte comme un échec**   | non    | erreurs | Si les tâches terminées en `WARNINGS: n` comptent comme des échecs.                                             |
-| **Types de tâches à conserver**    | non    | tous    | Types Proxmox séparés par des virgules, ex. `vzdump, replication`.                                              |
-| **Échecs détaillés**               | non    | `5`     | Nombre d'échecs décrits dans le texte de détail (le compteur couvre toujours toute la fenêtre).                 |
-| **Fuseau horaire**                 | non    | hôte    | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                       |
-| **Intervalle de rafraîchissement** | non    | `300` s | Fréquence de lecture du journal des tâches.                                                                     |
+| Champ                                          | Requis | Défaut  | Remarques                                                                                                       |
+| ---------------------------------------------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------- |
+| **Hôte Proxmox**                               | oui    | —       | IP ou nom d'hôte de n'importe quel nœud — un nœud répond pour tout le cluster.                                  |
+| **Port de l'API**                              | non    | `8006`  | Le port de l'API Proxmox VE.                                                                                    |
+| **Identifiant du jeton d'API**                 | oui    | —       | La forme complète `utilisateur@realm!nomdujeton`, ex. `gladys@pve!tasks`.                                       |
+| **Secret du jeton d'API**                      | oui    | —       | La valeur affichée une seule fois par Proxmox. Stockée chiffrée par Gladys, jamais renvoyée à votre navigateur. |
+| **Empreinte du certificat TLS**                | non    | vide    | Empreinte SHA-256 du certificat du nœud. Voir plus bas.                                                         |
+| **Vérifier le certificat TLS**                 | non    | activé  | À laisser activé. Voir plus bas.                                                                                |
+| **Nœuds à surveiller**                         | non    | tous    | Noms séparés par des virgules, ex. `pve1, pve2`. Filtre aussi les VM/LXC remontées.                             |
+| **Ancienneté maximale d'une sauvegarde**       | non    | `7` j   | La dernière sauvegarde est recherchée dans cette fenêtre.                                                       |
+| **Ce qui compte comme une sauvegarde réussie** | non    | OK seul | Si une sauvegarde terminée en `WARNINGS: n` compte quand même comme réussie.                                    |
+| **Fuseau horaire**                             | non    | hôte    | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                       |
+| **Intervalle de rafraîchissement**             | non    | `300` s | Fréquence de lecture de Proxmox.                                                                                |
 
 ### TLS : le certificat auto-signé de Proxmox
 
@@ -199,31 +216,31 @@ bonne :
    prouve que le serveur atteint est bien votre nœud — et le secret du jeton
    d'API transite sur cette connexion.
 
-### Ce qui compte comme un échec
+### Ce qui compte comme une sauvegarde réussie
 
-Proxmox enregistre une tâche terminée avec l'un de ces statuts :
+Proxmox enregistre une sauvegarde terminée avec l'un de ces statuts :
 
-| Statut Proxmox     | Signification                          | Compté en « Erreurs uniquement » | Compté en « Erreurs et avertissements » |
-| ------------------ | -------------------------------------- | -------------------------------- | --------------------------------------- |
-| `OK`               | succès                                 | non                              | non                                     |
-| `WARNINGS: 3`      | terminée, avec des avertissements      | non                              | **oui**                                 |
-| toute autre chaîne | message d'erreur                       | **oui**                          | **oui**                                 |
-| _(vide)_           | aucun statut de sortie — worker planté | **oui**                          | **oui**                                 |
+| Statut Proxmox     | Signification                          | « OK uniquement » (défaut) | « OK et avertissements » |
+| ------------------ | -------------------------------------- | -------------------------- | ------------------------ |
+| `OK`               | succès                                 | **allumé**                 | **allumé**               |
+| `WARNINGS: 3`      | terminée, avec des avertissements      | éteint                     | **allumé**               |
+| toute autre chaîne | message d'erreur                       | éteint                     | éteint                   |
+| _(vide)_           | aucun statut de sortie — worker planté | éteint                     | éteint                   |
 
 Une sauvegarde qui s'est terminée mais a sauté un invité finit en
-`WARNINGS: n`. Choisissez _Erreurs et avertissements_ si vous voulez en être
-informé.
+`WARNINGS: n`. Choisissez _OK et avertissements_ si cela vous convient.
 
-Seules les tâches **terminées** sont lues (la liste archivée de Proxmox) : une
-tâche encore en cours n'est pas un échec et n'est jamais comptée.
+Seules les sauvegardes **terminées** sont lues (la liste archivée de Proxmox) :
+une sauvegarde encore en cours n'est pas encore la dernière sauvegarde.
 
 ## Actions
 
 - **Tester la connexion** — vérifie que l'hôte répond, que le jeton d'API est
-  accepté, et qu'il peut réellement lire le journal des tâches de chaque nœud
-  surveillé. À lancer en premier dès que quelque chose semble anormal.
-- **Rafraîchir maintenant** — lit le journal des tâches immédiatement, sur tous
-  les nœuds, sans attendre le prochain rafraîchissement.
+  accepté, qu'il peut réellement lire le journal des tâches de chaque nœud
+  surveillé, et combien de VM/LXC il voit. À lancer en premier dès que quelque
+  chose semble anormal.
+- **Rafraîchir maintenant** — lit les sauvegardes et l'état des VM/LXC
+  immédiatement, sans attendre le prochain rafraîchissement.
 
 ## Dépannage
 
@@ -238,12 +255,24 @@ Proxmox ne l'affiche qu'une fois.
 la séparation des privilèges activée, souvenez-vous que l'utilisateur _et_ le
 jeton ont chacun besoin de l'ACL.
 
-**Le compteur reste à 0 alors que l'interface Proxmox montre des échecs** —
-c'est presque toujours ce privilège manquant. Lancez **Tester la connexion**.
-Si le test est bon, vérifiez la fenêtre d'observation (un échec plus ancien que
-la fenêtre n'est pas compté), le filtre _Types de tâches à conserver_, et si
-les échecs que vous regardez ne sont pas des `WARNINGS:` exclus par le
-périmètre par défaut.
+**« Aucune VM ni LXC n'est visible »** — il manque `VM.Audit` au jeton (sur
+`/vms`, ou sur `/`). La liste des invités est filtrée et non refusée : un jeton
+sous-privilégié ne voit tout simplement rien.
+
+**« Last backup » reste `unknown` alors que l'interface Proxmox montre des
+sauvegardes** — soit le privilège `Sys.Audit` manquant ci-dessus (lancez
+**Tester la connexion**), soit une fenêtre plus courte que votre planification :
+un nœud sauvegardé toutes les deux semaines ne remonte rien avec la fenêtre par
+défaut de 7 jours. Augmentez _Ancienneté maximale d'une sauvegarde_.
+
+**« Backup status » est éteint alors que la sauvegarde semble bonne** — elle
+s'est probablement terminée en `WARNINGS: n` (un invité sauté, un hook non
+nul…). Ouvrez la tâche dans l'interface Proxmox pour en voir la raison, ou
+passez _Ce qui compte comme une sauvegarde réussie_ sur _OK et avertissements_.
+
+**Une VM supprimée apparaît encore** — l'appareil Gladys reste tant que vous ne
+le supprimez pas dans Gladys ; l'intégration cesse simplement de publier des
+états pour lui, il se fige donc sur sa dernière valeur.
 
 **« Proxmox presents a self-signed certificate »** — épinglez son empreinte,
 voir la section TLS ci-dessus.

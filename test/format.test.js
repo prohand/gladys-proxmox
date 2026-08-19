@@ -1,18 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  formatBackupSummary,
   formatDuration,
-  formatFailureDetails,
+  formatLastBackup,
   formatStatus,
-  formatTaskLabel,
   formatTimestamp,
-  MAX_DETAILS_LENGTH,
   resolveTimezone,
+  UNKNOWN_TEXT,
 } from '../src/format.js';
-import { normalizeConfig } from '../src/config.js';
 
 // 2026-08-19 00:00:00 UTC
 const EPOCH = 1787097600;
+
+const BACKUP = {
+  type: 'vzdump',
+  id: '101',
+  starttime: EPOCH,
+  endtime: EPOCH + 248,
+  duration: 248,
+  status: 'OK',
+  statusType: 'ok',
+  success: true,
+};
 
 test('formatTimestamp renders the epoch in the requested time zone', () => {
   assert.equal(formatTimestamp(EPOCH, 'UTC'), '2026-08-19 00:00:00');
@@ -51,81 +61,31 @@ test('formatStatus names the status-less case instead of showing nothing', () =>
   assert.ok(formatStatus('x'.repeat(500), 'error').length <= 160);
 });
 
-test('formatTaskLabel appends the guest id when there is one', () => {
-  assert.equal(formatTaskLabel({ type: 'vzdump', id: '101' }), 'vzdump (101)');
-  assert.equal(formatTaskLabel({ type: 'srvreload', id: '' }), 'srvreload');
+test('formatLastBackup names the time zone the wall clock belongs to', () => {
+  assert.equal(formatLastBackup(BACKUP, 'Europe/Paris'), '2026-08-19 02:00:00 (Europe/Paris)');
+  assert.equal(formatLastBackup(BACKUP, 'UTC'), '2026-08-19 00:00:00 (UTC)');
 });
 
-const config = normalizeConfig({
-  timezone: 'Europe/Paris',
-  lookback_hours: 24,
-  max_failures_listed: 2,
+test('formatLastBackup says "unknown" when the node has no backup', () => {
+  assert.equal(formatLastBackup(null, 'UTC'), UNKNOWN_TEXT);
+  assert.equal(formatLastBackup({ starttime: null }, 'UTC'), UNKNOWN_TEXT);
 });
 
-test('formatFailureDetails says so plainly when nothing failed', () => {
-  const text = formatFailureDetails({ node: 'pve1', tasks: [], config });
-  assert.equal(text, 'No failed task on pve1 in the last 24 h.');
+test('formatBackupSummary shows when, how long and how it ended', () => {
+  assert.equal(
+    formatBackupSummary('pve1', BACKUP, 'UTC'),
+    'pve1: 2026-08-19 00:00:00, 4 min 8 s, OK',
+  );
 });
 
-test('formatFailureDetails reports type, both timestamps, duration and status', () => {
-  const tasks = [
-    {
-      type: 'vzdump',
-      id: '101',
-      starttime: EPOCH,
-      endtime: EPOCH + 248,
-      status: "command 'lvcreate' failed: exit code 5",
-      statusType: 'error',
-    },
-  ];
-  const text = formatFailureDetails({ node: 'pve1', tasks, config });
-  assert.match(text, /^1 failed task on pve1 in the last 24 h \(times in Europe\/Paris\):/);
-  assert.match(text, /• vzdump \(101\)/);
-  assert.match(text, /2026-08-19 02:00:00 → 2026-08-19 02:04:08 \(4 min 8 s\)/);
-  assert.match(text, /status: command 'lvcreate' failed: exit code 5/);
+test('formatBackupSummary drops the duration of a backup that never ended', () => {
+  const crashed = { ...BACKUP, endtime: null, duration: null, status: '', statusType: 'unknown' };
+  assert.equal(
+    formatBackupSummary('pve1', crashed, 'UTC'),
+    'pve1: 2026-08-19 00:00:00, no exit status (worker crashed?)',
+  );
 });
 
-test('formatFailureDetails lists at most max_failures_listed and counts the rest', () => {
-  const tasks = [1, 2, 3, 4, 5].map((index) => ({
-    type: 'vzdump',
-    id: String(100 + index),
-    starttime: EPOCH - index * 60,
-    endtime: EPOCH - index * 60 + 10,
-    status: 'failed',
-    statusType: 'error',
-  }));
-  const text = formatFailureDetails({ node: 'pve1', tasks, config });
-  assert.match(text, /^5 failed tasks on pve1/);
-  assert.equal(text.match(/• vzdump/g).length, 2);
-  assert.match(text, /… and 3 more failure\(s\) in the window\./);
-});
-
-test('formatFailureDetails renders a task that never ended', () => {
-  const tasks = [
-    {
-      type: 'qmigrate',
-      id: '110',
-      starttime: EPOCH,
-      endtime: null,
-      status: '',
-      statusType: 'unknown',
-    },
-  ];
-  const text = formatFailureDetails({ node: 'pve1', tasks, config });
-  assert.match(text, /2026-08-19 02:00:00 → —/);
-  assert.match(text, /status: no exit status \(worker crashed\?\)/);
-});
-
-test('formatFailureDetails stays within the length cap', () => {
-  const tasks = Array.from({ length: 20 }, (_, index) => ({
-    type: 'vzdump',
-    id: String(index),
-    starttime: EPOCH - index,
-    endtime: EPOCH - index + 1,
-    status: 'x'.repeat(150),
-    statusType: 'error',
-  }));
-  const wide = normalizeConfig({ timezone: 'UTC', max_failures_listed: 20 });
-  const text = formatFailureDetails({ node: 'pve1', tasks, config: wide });
-  assert.ok(text.length <= MAX_DETAILS_LENGTH, `text is ${text.length} chars`);
+test('formatBackupSummary says so plainly when there is no backup at all', () => {
+  assert.equal(formatBackupSummary('pve2', null, 'UTC'), 'pve2: no backup');
 });

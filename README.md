@@ -1,55 +1,60 @@
-# Gladys ⇄ Proxmox VE — failed task monitoring
+# Gladys ⇄ Proxmox VE — backup and guest monitoring
 
 External integration for [Gladys Assistant](https://gladysassistant.com) that
-surfaces the **failed tasks** of your Proxmox VE nodes: a failed task counter
-per node, plus the details of the recent failures (task type, start and end
-timestamps in your local time zone, and the status Proxmox recorded).
+surfaces the **backups** of your Proxmox VE nodes — when the last one ran, how
+long it took and whether it succeeded — plus the **running state of every VM
+and LXC container**.
 
 Built on the official
 [JavaScript integration template](https://github.com/GladysAssistant/integration-template-js)
 and the [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js).
 
 > **Read-only by construction.** The API client implements `GET` and nothing
-> else. The integration needs a single Proxmox privilege — `Sys.Audit` on
-> `/nodes` — and never starts, stops, migrates or reconfigures anything.
+> else. The integration needs two audit privileges — `Sys.Audit` on `/nodes`
+> and `VM.Audit` on `/vms` — and never starts, stops, migrates or reconfigures
+> anything.
 
 ## What it publishes
 
-One Gladys device per Proxmox node (`Proxmox <node>`), each with two read-only
-features:
+**One Gladys device per Proxmox node** (`Proxmox <node>`), with three
+read-only features describing its last backup (`vzdump` task):
 
-| Feature                    | Category / type              | Contents                                                                                                                                       |
-| -------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Failed tasks (N h)**     | `counter-sensor` / `integer` | Number of failed tasks on that node inside the observation window. `keep_history: true` → chartable, usable as a scene trigger.                |
-| **Recent failure details** | `text` / `text`              | One block per recent failure: task type (+ guest id), start → end timestamps in the user's time zone, duration, and the Proxmox status string. |
+| Feature             | Category / type        | Contents                                                                                                              |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Last backup**     | `text` / `text`        | When the last backup started, in your time zone (`2026-08-19 02:00:00 (Europe/Paris)`). `unknown` when there is none. |
+| **Backup duration** | `duration` / `integer` | How long that backup ran, in seconds. `keep_history: true` → chartable, usable as a scene trigger.                    |
+| **Backup status**   | `switch` / `binary`    | **On** when that backup succeeded, **off** for any other state (error, crashed worker, and warnings by default).      |
 
-```
-2 failed tasks on pve1 in the last 24 h (times in Europe/Paris):
-• vzdump (101)
-  2026-08-19 02:00:00 → 2026-08-19 02:04:08 (4 min 8 s)
-  status: command 'lvcreate' failed: exit code 5
-• qmigrate (110)
-  2026-08-19 09:12:31 → 2026-08-19 09:13:02 (31 s)
-  status: no such logical volume pve/data
-```
+**One Gladys device per VM and LXC container**
+(`Proxmox <name> (<vmid>)`), with a single read-only feature:
+
+| Feature    | Category / type     | Contents                                                         |
+| ---------- | ------------------- | ---------------------------------------------------------------- |
+| **Status** | `switch` / `binary` | **On** when the guest state is `running`, **off** for any other. |
+
+A node with no backup inside the observation window publishes `unknown` on
+**Last backup** and nothing at all on the two others: a `0 s` duration and an
+`off` status would both be lies. Templates are never turned into devices, and a
+guest that disappears keeps its last known state rather than being faked to
+`off`.
 
 ## Required Proxmox permissions
 
-**`Sys.Audit` on `/nodes`.** That is the whole list. Either through the
-built-in read-only role:
+**`Sys.Audit` on `/nodes`** (read the backup task log) and **`VM.Audit` on
+`/vms`** (see the VMs and containers). The built-in read-only role grants both:
 
 ```bash
 pveum user add gladys@pve --password "$(openssl rand -base64 24)"
-pveum acl modify /nodes --users gladys@pve --roles PVEAuditor
+pveum acl modify / --users gladys@pve --roles PVEAuditor
 
 pveum user token add gladys@pve tasks --privsep 1   # prints the secret ONCE
-pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles PVEAuditor
+pveum acl modify / --tokens 'gladys@pve!tasks' --roles PVEAuditor
 ```
 
-…or through a minimal custom role, if you prefer least privilege:
+…or, if you prefer least privilege, a custom role holding exactly those two:
 
 ```bash
-pveum role add GladysTaskAudit --privs "Sys.Audit"
+pveum role add GladysBackupAudit --privs "Sys.Audit,VM.Audit"
 ```
 
 With privilege separation on (the default, and recommended), the **user and the
@@ -58,17 +63,19 @@ the two.
 
 Endpoints called, and what each needs:
 
-| Endpoint                         | Method | Privilege                        |
-| -------------------------------- | ------ | -------------------------------- |
-| `/api2/json/nodes`               | GET    | none (any authenticated token)   |
-| `/api2/json/nodes/{node}/tasks`  | GET    | `Sys.Audit` on `/nodes/{node}` * |
-| `/api2/json/nodes/{node}/status` | GET    | `Sys.Audit` on `/nodes/{node}`   |
+| Endpoint                               | Method | Privilege                         |
+| -------------------------------------- | ------ | --------------------------------- |
+| `/api2/json/nodes`                     | GET    | none (any authenticated token)    |
+| `/api2/json/nodes/{node}/tasks`        | GET    | `Sys.Audit` on `/nodes/{node}` \* |
+| `/api2/json/nodes/{node}/status`       | GET    | `Sys.Audit` on `/nodes/{node}`    |
+| `/api2/json/cluster/resources?type=vm` | GET    | `VM.Audit` on `/vms/{vmid}` \*    |
 
-\* The task list is permission-**filtered**, not permission-refused: without
-`Sys.Audit`, Proxmox answers `200 OK` with only the token's own tasks — so an
-under-privileged setup silently reports zero failures forever. That is why the
-**Test the connection** action probes `/nodes/{node}/status`, which does return
-`403`, and names the nodes that are missing the privilege.
+\* Both lists are permission-**filtered**, not permission-refused: without the
+privilege, Proxmox answers `200 OK` with only the token's own tasks, or with an
+empty guest list — so an under-privileged setup silently reports "no backup,
+no VM" forever. That is why the **Test the connection** action probes
+`/nodes/{node}/status`, which does return `403`, and reports how many guests the
+token can actually see.
 
 The full step-by-step (web UI and CLI, TLS, troubleshooting) is in
 [`docs/en.md`](docs/en.md) / [`docs/fr.md`](docs/fr.md) — Gladys re-hosts those
@@ -99,12 +106,15 @@ dependencies** beyond the SDK.
 ├─ src/
 │  ├─ proxmox/
 │  │  ├─ client.js                   #   HTTPS GET client: token auth, TLS posture, error mapping
-│  │  └─ tasks.js                    #   node listing, failed-task reading, status classification
+│  │  ├─ nodes.js                    #   node listing and the Sys.Audit privilege probe
+│  │  ├─ backups.js                  #   last backup of a node, and what "successful" means
+│  │  └─ guests.js                   #   VM/LXC listing, with its short-lived snapshot cache
 │  ├─ devices/
-│  │  ├─ index.js                    #   registry: one device per discovered node
-│  │  └─ proxmoxNode.js              #   the node device: its two features, and its poll
+│  │  ├─ index.js                    #   registry: one device per node, one per guest
+│  │  ├─ proxmoxNode.js              #   the node device: its three backup features, and its poll
+│  │  └─ proxmoxGuest.js             #   the guest device: its status feature, and its poll
 │  ├─ actions.js                     # the Configuration screen buttons
-│  ├─ format.js                      # timestamps in the user's time zone, details text
+│  ├─ format.js                      # timestamps in the user's time zone, durations, summaries
 │  └─ config.js                      # config defaults, normalization, bounds
 ├─ docs/
 │  ├─ en.md                          # user documentation (re-hosted by Gladys and
@@ -116,41 +126,39 @@ dependencies** beyond the SDK.
 
 ## Configuration
 
-| Key                   | Type    | Default | Purpose                                                       |
-| --------------------- | ------- | ------- | ------------------------------------------------------------- |
-| `host`                | string  | —       | IP/hostname of any node (one answers for the whole cluster)   |
-| `port`                | number  | `8006`  | Proxmox VE API port                                           |
-| `token_id`            | string  | —       | `user@realm!tokenname`                                        |
-| `token_secret`        | secret  | —       | Shown once by Proxmox; stored encrypted, never logged         |
-| `tls_fingerprint`     | string  | empty   | SHA-256 fingerprint to pin                                    |
-| `tls_verify`          | boolean | `true`  | Chain-of-trust check when no fingerprint is pinned            |
-| `nodes_filter`        | string  | all     | Comma-separated node names                                    |
-| `lookback_hours`      | number  | `24`    | Observation window                                            |
-| `failure_scope`       | select  | errors  | Whether `WARNINGS: n` counts as a failure                     |
-| `task_type_filter`    | string  | all     | Comma-separated Proxmox task types (`vzdump`, `replication`…) |
-| `max_failures_listed` | number  | `5`     | Failures described in the details text                        |
-| `timezone`            | string  | host    | IANA zone for the rendered timestamps                         |
-| `poll_frequency`      | number  | `300`   | Refresh interval, seconds                                     |
+| Key                    | Type    | Default   | Purpose                                                     |
+| ---------------------- | ------- | --------- | ----------------------------------------------------------- |
+| `host`                 | string  | —         | IP/hostname of any node (one answers for the whole cluster) |
+| `port`                 | number  | `8006`    | Proxmox VE API port                                         |
+| `token_id`             | string  | —         | `user@realm!tokenname`                                      |
+| `token_secret`         | secret  | —         | Shown once by Proxmox; stored encrypted, never logged       |
+| `tls_fingerprint`      | string  | empty     | SHA-256 fingerprint to pin                                  |
+| `tls_verify`           | boolean | `true`    | Chain-of-trust check when no fingerprint is pinned          |
+| `nodes_filter`         | string  | all       | Comma-separated node names; also scopes the guests          |
+| `backup_lookback_days` | number  | `7`       | How far back the last backup is looked for                  |
+| `backup_success_scope` | select  | `ok_only` | Whether `WARNINGS: n` still counts as a successful backup   |
+| `timezone`             | string  | host      | IANA zone for the rendered timestamp                        |
+| `poll_frequency`       | number  | `300`     | Refresh interval, seconds                                   |
 
-### What counts as a failure
+### What counts as a successful backup
 
 Mirrors Proxmox's own `PVE::UPID::normalize_status_type`:
 
-| Proxmox `status` | Type      | `errors` (default) | `errors_and_warnings` |
-| ---------------- | --------- | ------------------ | --------------------- |
-| `OK`             | `ok`      | —                  | —                     |
-| `WARNINGS: 3`    | `warning` | —                  | ✔                     |
-| _(empty)_        | `unknown` | ✔                  | ✔                     |
-| anything else    | `error`   | ✔                  | ✔                     |
+| Proxmox `status` | Type      | `ok_only` (default) | `ok_and_warnings` |
+| ---------------- | --------- | ------------------- | ----------------- |
+| `OK`             | `ok`      | ✔ on                | ✔ on              |
+| `WARNINGS: 3`    | `warning` | off                 | ✔ on              |
+| _(empty)_        | `unknown` | off                 | off               |
+| anything else    | `error`   | off                 | off               |
 
-Only finished (archived) tasks are read: a running task is never a failure.
+Only finished (archived) tasks are read: a backup still running is not the last
+backup yet.
 
-The query sent to Proxmox is deliberately limited to `errors`, `limit` and
-`start` — the parameters every Proxmox VE generation accepts. The newer
-`since` / `until` / `statusfilter` / `source` parameters would be rejected with
-a `400` by older nodes (the endpoint declares `additionalProperties => 0`), so
-the time window and the status scope are applied client-side instead.
-`errors=1` returns everything that is not `OK`, a superset of both scopes.
+The task page is asked for with `typefilter=vzdump` so Proxmox does the
+filtering; a node that answers `400` (older generations declare
+`additionalProperties => 0` on that endpoint) is remembered, and its whole task
+page is filtered here instead. The observation window is always applied
+client-side, for the same portability reason.
 
 ## Run it locally
 
