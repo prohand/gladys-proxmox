@@ -104,3 +104,15 @@ test('the manifest version matches the docker image tag', () => {
     `docker_image "${manifest.docker_image}" must be tagged with version ${manifest.version}`,
   );
 });
+
+test('the store description stays under the 100 character cap', () => {
+  // The store schema rejects a longer one (`manifest.description.*: must NOT
+  // have more than 100 characters`), and the indexer is the only place that
+  // check runs — so it runs here too.
+  for (const [lang, text] of Object.entries(manifest.description)) {
+    assert.ok(
+      text.length <= 100,
+      `manifest.description.${lang} is ${text.length} characters, the store allows 100`,
+    );
+  }
+});
