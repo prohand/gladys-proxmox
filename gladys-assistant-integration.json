@@ -10,13 +10,8 @@
   "docker_image": "ghcr.io/prohand/gladys-proxmox:1.0.1",
   "gladys_version": ">=4.86.0",
   "cover_image": "https://raw.githubusercontent.com/prohand/gladys-proxmox/main/cover.png",
-  "categories": [
-    "network",
-    "services"
-  ],
-  "transports": [
-    "local"
-  ],
+  "categories": ["network", "services"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
@@ -334,8 +329,8 @@
         "fr": "Ancienneté maximale d'une sauvegarde recherchée (jours)"
       },
       "description": {
-        "en": "The last backup is looked for inside this window. A node with no backup in it reports \"unknown\". Raise it if your backup jobs run less often than that.",
-        "fr": "La dernière sauvegarde est recherchée dans cette fenêtre. Un nœud sans sauvegarde dedans remonte « unknown ». Augmentez-la si vos travaux de sauvegarde sont plus espacés."
+        "en": "The last backup is looked for inside this window. A node with no backup in it reads \"unknown\" on \"Last backup\" and \"Backup status\", and publishes no duration at all. Raise it if your backup jobs run less often than that.",
+        "fr": "La dernière sauvegarde est recherchée dans cette fenêtre. Un nœud sans sauvegarde dedans affiche « unknown » sur « Last backup » et « Backup status », et ne publie aucune durée. Augmentez-la si vos travaux de sauvegarde sont plus espacés."
       },
       "required": false,
       "default": 7,
@@ -350,8 +345,8 @@
         "fr": "Ce qui compte comme une sauvegarde réussie"
       },
       "description": {
-        "en": "Proxmox marks a finished backup OK, WARNINGS: n (it completed but skipped something), or with an error string. Choose whether a backup that ended with warnings still turns the \"Backup status\" feature on.",
-        "fr": "Proxmox marque une sauvegarde terminée OK, WARNINGS: n (terminée mais avec des éléments ignorés), ou avec un message d'erreur. Choisissez si une sauvegarde terminée avec des avertissements allume quand même la fonctionnalité « Backup status »."
+        "en": "Proxmox marks a finished backup OK, WARNINGS: n (it completed but skipped something), or with an error string. Choose whether a backup that ended with warnings still reads \"OK\" on the \"Backup status\" feature, or \"failed — WARNINGS: n\".",
+        "fr": "Proxmox marque une sauvegarde terminée OK, WARNINGS: n (terminée mais avec des éléments ignorés), ou avec un message d'erreur. Choisissez si une sauvegarde terminée avec des avertissements affiche quand même « OK » sur la fonctionnalité « Backup status », ou « failed — WARNINGS: n »."
       },
       "required": false,
       "default": "ok_only",

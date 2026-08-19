@@ -181,12 +181,14 @@ Proxmox never renames or orphans the devices of the first.
 
 Mirrors Proxmox's own `PVE::UPID::normalize_status_type`:
 
-| Proxmox `status` | Type      | `ok_only` (default) | `ok_and_warnings` |
-| ---------------- | --------- | ------------------- | ----------------- |
-| `OK`             | `ok`      | ✔ on                | ✔ on              |
-| `WARNINGS: 3`    | `warning` | off                 | ✔ on              |
-| _(empty)_        | `unknown` | off                 | off               |
-| anything else    | `error`   | off                 | off               |
+`Backup status` is text, so the scope decides which verdict is published:
+
+| Proxmox `status` | Type      | `ok_only` (default)                         | `ok_and_warnings`                           |
+| ---------------- | --------- | ------------------------------------------- | ------------------------------------------- |
+| `OK`             | `ok`      | `OK`                                        | `OK`                                        |
+| `WARNINGS: 3`    | `warning` | `failed — WARNINGS: 3`                      | `OK`                                        |
+| _(empty)_        | `unknown` | `failed — no exit status (worker crashed?)` | `failed — no exit status (worker crashed?)` |
+| anything else    | `error`   | `failed — <the error>`                      | `failed — <the error>`                      |
 
 Only finished (archived) tasks are read: a backup still running is not the last
 backup yet.
