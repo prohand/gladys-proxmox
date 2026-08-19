@@ -14,30 +14,44 @@ Après l'installation, un appareil Gladys apparaît par nœud Proxmox, nommé
 `Proxmox <nœud>`, portant trois fonctionnalités en lecture seule décrivant sa
 **dernière sauvegarde** (une tâche `vzdump` Proxmox) :
 
-| Fonctionnalité      | Type            | Contenu                                                                                                                                    |
-| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Last backup**     | Texte           | Le début de la dernière sauvegarde, dans votre fuseau — ex. `2026-08-19 02:00:00 (Europe/Paris)`. Vaut `unknown` si le nœud n'en a aucune. |
-| **Backup duration** | Capteur entier  | La durée de cette sauvegarde, en secondes. Historisée : vous pouvez en tracer la courbe et déclencher des scènes dessus.                   |
-| **Backup status**   | Capteur binaire | **Allumé** si cette sauvegarde a réussi, **éteint** dans tout autre cas.                                                                   |
+| Fonctionnalité      | Type           | Contenu                                                                                                                                    |
+| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Last backup**     | Texte          | Le début de la dernière sauvegarde, dans votre fuseau — ex. `2026-08-19 02:00:00 (Europe/Paris)`. Vaut `unknown` si le nœud n'en a aucune. |
+| **Backup duration** | Capteur entier | La durée de cette sauvegarde, en secondes. Historisée : vous pouvez en tracer la courbe et déclencher des scènes dessus.                   |
+| **Backup status**   | Texte          | `OK`, ou `failed — ` suivi de ce que Proxmox a dit — ex. `failed — command 'lvcreate' failed: exit code 5`.                                |
 
 Et un appareil Gladys par machine virtuelle et par conteneur LXC, nommé
 `Proxmox <nom> (<vmid>)` :
 
-| Fonctionnalité | Type            | Contenu                                                               |
-| -------------- | --------------- | --------------------------------------------------------------------- |
-| **Status**     | Capteur binaire | **Allumé** si l'invité est `running`, **éteint** dans tout autre cas. |
+| Fonctionnalité | Type  | Contenu                                                                           |
+| -------------- | ----- | --------------------------------------------------------------------------------- |
+| **Status**     | Texte | L'état tel que Proxmox le rapporte : `running`, `stopped`, `paused`, `suspended`… |
+
+**Pourquoi du texte plutôt que des capteurs binaires ?** Proxmox répond par un
+mot ou par une ligne d'erreur entière, là où une fonctionnalité binaire ne sait
+dire que « pas allumé » : une VM en pause se lisait exactement comme une VM
+arrêtée, et une sauvegarde en échec ne disait rien du _pourquoi_ — il fallait
+ouvrir le journal des tâches Proxmox pour découvrir le datastore plein. Les
+fonctionnalités texte portent la réponse elle-même. Un interrupteur est de plus
+la forme que Gladys donne à un actionneur, ce que ces relevés en lecture seule
+ne sont jamais.
+
+Ce qui compte comme une réussite reste votre choix : avec le réglage par défaut
+_OK uniquement_, une sauvegarde terminée en `WARNINGS: 2` publie
+`failed — WARNINGS: 2` ; passez _Ce qui compte comme une sauvegarde réussie_ sur
+_OK et avertissements_ et la même sauvegarde publie `OK`.
 
 Un nœud sans sauvegarde dans la fenêtre d'observation publie `unknown` sur
-**Last backup**, et laisse **Backup duration** et **Backup status** inconnus
+**Last backup** et sur **Backup status**, et laisse **Backup duration** inconnue
 plutôt que d'afficher une sauvegarde de `0 s` qui n'a jamais eu lieu. Les
 modèles (templates) ne deviennent jamais des appareils, et un invité qui
 disparaît (supprimé, ou plus visible par le jeton) conserve son dernier état
-connu au lieu d'être éteint artificiellement.
+connu au lieu d'être affiché comme arrêté.
 
-La durée et les deux fonctionnalités binaires étant historisées, l'usage
-naturel dans Gladys est une scène déclenchée dessus : _quand « Backup status »
-sur pve1 s'éteint, préviens-moi_, ou _quand « Status » de ma VM NAS s'éteint,
-préviens-moi_.
+L'usage naturel dans Gladys est une scène déclenchée sur ces textes : _quand
+« Backup status » sur pve1 n'est pas « OK », préviens-moi_, ou _quand « Status »
+de ma VM NAS n'est pas « running », préviens-moi_. **Backup duration** est la
+fonctionnalité historisée : c'est celle dont vous pouvez tracer la courbe.
 
 ### Deux serveurs Proxmox
 
@@ -253,14 +267,15 @@ bonne :
 
 ### Ce qui compte comme une sauvegarde réussie
 
-Proxmox enregistre une sauvegarde terminée avec l'un de ces statuts :
+Proxmox enregistre une sauvegarde terminée avec l'un de ces statuts, et
+**Backup status** publie :
 
-| Statut Proxmox     | Signification                          | « OK uniquement » (défaut) | « OK et avertissements » |
-| ------------------ | -------------------------------------- | -------------------------- | ------------------------ |
-| `OK`               | succès                                 | **allumé**                 | **allumé**               |
-| `WARNINGS: 3`      | terminée, avec des avertissements      | éteint                     | **allumé**               |
-| toute autre chaîne | message d'erreur                       | éteint                     | éteint                   |
-| _(vide)_           | aucun statut de sortie — worker planté | éteint                     | éteint                   |
+| Statut Proxmox     | Signification                          | « OK uniquement » (défaut)                  | « OK et avertissements »                    |
+| ------------------ | -------------------------------------- | ------------------------------------------- | ------------------------------------------- |
+| `OK`               | succès                                 | `OK`                                        | `OK`                                        |
+| `WARNINGS: 3`      | terminée, avec des avertissements      | `failed — WARNINGS: 3`                      | `OK`                                        |
+| toute autre chaîne | message d'erreur                       | `failed — <l'erreur>`                       | `failed — <l'erreur>`                       |
+| _(vide)_           | aucun statut de sortie — worker planté | `failed — no exit status (worker crashed?)` | `failed — no exit status (worker crashed?)` |
 
 Une sauvegarde qui s'est terminée mais a sauté un invité finit en
 `WARNINGS: n`. Choisissez _OK et avertissements_ si cela vous convient.
@@ -304,10 +319,12 @@ sauvegardes** — soit le privilège `Sys.Audit` manquant ci-dessus (lancez
 un nœud sauvegardé toutes les deux semaines ne remonte rien avec la fenêtre par
 défaut de 7 jours. Augmentez _Ancienneté maximale d'une sauvegarde_.
 
-**« Backup status » est éteint alors que la sauvegarde semble bonne** — elle
-s'est probablement terminée en `WARNINGS: n` (un invité sauté, un hook non
-nul…). Ouvrez la tâche dans l'interface Proxmox pour en voir la raison, ou
-passez _Ce qui compte comme une sauvegarde réussie_ sur _OK et avertissements_.
+**« Backup status » indique `failed — WARNINGS: 2` alors que la sauvegarde
+semble bonne** — elle s'est terminée avec des avertissements (un invité sauté,
+un hook non nul…). Le texte après `failed — ` est celui de Proxmox : ouvrez
+cette tâche dans l'interface Proxmox pour en voir la raison, ou passez _Ce qui
+compte comme une sauvegarde réussie_ sur _OK et avertissements_ — une telle
+sauvegarde se lira alors `OK`.
 
 **Une VM supprimée apparaît encore** — l'appareil Gladys reste tant que vous ne
 le supprimez pas dans Gladys ; l'intégration cesse simplement de publier des

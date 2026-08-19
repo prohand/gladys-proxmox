@@ -10,12 +10,22 @@
 //                        window contains no backup at all;
 //   - Backup duration  : how long it ran, in seconds (integer sensor, kept in
 //                        history so the dashboard can chart it);
-//   - Backup status    : ON when that backup succeeded, OFF for any other
-//                        state (binary sensor).
+//   - Backup status    : the verdict and, when it failed, what Proxmox said —
+//                        "OK", "failed — WARNINGS: 2", "failed — no space left
+//                        on device" (text feature).
 //
-// The two numeric features are simply left unknown — no state published at all
-// — when the node has no backup in the window: a duration of 0 s and an OFF
-// status would both be lies.
+// The status is text rather than an on/off switch on purpose: Proxmox answers
+// with a sentence, and the sentence is the actionable part. A binary feature
+// could only say "not on", leaving the user to open the Proxmox task log to
+// learn that the datastore was full — and it rendered as a switch, an actuator
+// shape for something this integration never controls. The configured success
+// scope still decides the verdict, so a `WARNINGS: n` run reads "OK" or
+// "failed — WARNINGS: n" as the user asked.
+//
+// Backup duration is the one feature left unknown — no state published at all —
+// when the node has no backup in the window: a numeric feature cannot say
+// "unknown", and a duration of 0 s would be a lie. The two text features say it
+// in words instead.
 //
 // The device is never controllable: this integration only reads Proxmox.
 // -----------------------------------------------------------------------------
@@ -29,7 +39,13 @@ import {
 import { fetchLastBackup } from '../proxmox/backups.js';
 import { devicePollFrequency } from '../poll.js';
 import { scopeId } from '../servers.js';
-import { formatBackupSummary, formatLastBackup, resolveTimezone } from '../format.js';
+import {
+  formatBackupStatus,
+  formatBackupSummary,
+  formatLastBackup,
+  resolveTimezone,
+} from '../format.js';
+import { textFeature } from './features.js';
 
 export const DEVICE_TYPE = 'proxmox-node';
 
@@ -81,17 +97,7 @@ export function buildNodeDevice(gladys, server, node) {
     // `claimPoll()` instead. See `src/poll.js`.
     poll_frequency: devicePollFrequency(server.poll_frequency),
     features: [
-      {
-        name: 'Last backup',
-        external_id: ids.feature(FEATURE.LAST_BACKUP),
-        category: DEVICE_FEATURE_CATEGORIES.TEXT,
-        type: DEVICE_FEATURE_TYPES.TEXT.TEXT,
-        read_only: true,
-        has_feedback: false,
-        // Text states live in `last_value_string`: Gladys keeps no history for
-        // them, so asking for one would be a lie.
-        keep_history: false,
-      },
+      textFeature('Last backup', ids.feature(FEATURE.LAST_BACKUP)),
       {
         name: 'Backup duration',
         external_id: ids.feature(FEATURE.BACKUP_DURATION),
@@ -104,17 +110,7 @@ export function buildNodeDevice(gladys, server, node) {
         has_feedback: false,
         keep_history: true,
       },
-      {
-        name: 'Backup status',
-        external_id: ids.feature(FEATURE.BACKUP_STATUS),
-        category: DEVICE_FEATURE_CATEGORIES.SWITCH,
-        type: DEVICE_FEATURE_TYPES.SWITCH.BINARY,
-        min: 0,
-        max: 1,
-        read_only: true,
-        has_feedback: false,
-        keep_history: true,
-      },
+      textFeature('Backup status', ids.feature(FEATURE.BACKUP_STATUS)),
     ],
   };
 }
@@ -131,26 +127,26 @@ export async function pollNode(gladys, server, node) {
   const timezone = resolveTimezone(server.timezone);
   const backup = await fetchLastBackup(server, node);
 
-  // The text feature always gets a state: "unknown" is an answer too, and it is
-  // the one the user needs when a backup job silently stopped running.
+  // The two text features always get a state: "unknown" is an answer too, and
+  // it is the one the user needs when a backup job silently stopped running —
+  // where publishing nothing would leave last week's "OK" on screen forever.
   const states = [
     {
       device_feature_external_id: ids.feature(FEATURE.LAST_BACKUP),
       text: formatLastBackup(backup, timezone),
     },
+    {
+      device_feature_external_id: ids.feature(FEATURE.BACKUP_STATUS),
+      text: formatBackupStatus(backup),
+    },
   ];
 
-  if (backup) {
+  // A task with no end time reported no duration: unknown, which is not zero.
+  if (backup && backup.duration !== null) {
     states.push({
-      device_feature_external_id: ids.feature(FEATURE.BACKUP_STATUS),
-      state: backup.success ? 1 : 0,
+      device_feature_external_id: ids.feature(FEATURE.BACKUP_DURATION),
+      state: Math.min(backup.duration, MAX_BACKUP_DURATION_SECONDS),
     });
-    if (backup.duration !== null) {
-      states.push({
-        device_feature_external_id: ids.feature(FEATURE.BACKUP_DURATION),
-        state: Math.min(backup.duration, MAX_BACKUP_DURATION_SECONDS),
-      });
-    }
   }
 
   logger.info(

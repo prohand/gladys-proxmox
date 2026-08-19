@@ -27,20 +27,28 @@ read-only features describing its last backup (`vzdump` task):
 | ------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | **Last backup**     | `text` / `text`        | When the last backup started, in your time zone (`2026-08-19 02:00:00 (Europe/Paris)`). `unknown` when there is none. |
 | **Backup duration** | `duration` / `integer` | How long that backup ran, in seconds. `keep_history: true` → chartable, usable as a scene trigger.                    |
-| **Backup status**   | `switch` / `binary`    | **On** when that backup succeeded, **off** for any other state (error, crashed worker, and warnings by default).      |
+| **Backup status**   | `text` / `text`        | `OK`, or `failed — <what Proxmox said>` (`failed — WARNINGS: 2`). `unknown` when there is no backup.                  |
 
 **One Gladys device per VM and LXC container**
 (`Proxmox <name> (<vmid>)`), with a single read-only feature:
 
-| Feature    | Category / type     | Contents                                                         |
-| ---------- | ------------------- | ---------------------------------------------------------------- |
-| **Status** | `switch` / `binary` | **On** when the guest state is `running`, **off** for any other. |
+| Feature    | Category / type | Contents                                                                          |
+| ---------- | --------------- | --------------------------------------------------------------------------------- |
+| **Status** | `text` / `text` | The Proxmox state word, as it comes: `running`, `stopped`, `paused`, `suspended`… |
+
+Both statuses are **text**, not binary sensors: Proxmox answers with a word or a
+whole error line, where an on/off switch could only say "not on" — a paused VM
+read exactly like a stopped one, and finding out why a backup failed meant
+opening the Proxmox task log. A `switch` feature is also an actuator shape, and
+this integration never controls anything. The verdict still follows _What counts
+as a successful backup_: with the default scope a `WARNINGS: n` run reads
+`failed — WARNINGS: 2`, and `OK` once warnings are accepted.
 
 A node with no backup inside the observation window publishes `unknown` on
-**Last backup** and nothing at all on the two others: a `0 s` duration and an
-`off` status would both be lies. Templates are never turned into devices, and a
-guest that disappears keeps its last known state rather than being faked to
-`off`.
+**Last backup** and on **Backup status**, and nothing at all on the duration: a
+numeric feature cannot say "unknown", and `0 s` would be a lie. Templates are
+never turned into devices, and a guest that disappears keeps its last known
+state rather than being faked to `stopped`.
 
 ## Required Proxmox permissions
 

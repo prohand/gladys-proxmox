@@ -11,9 +11,9 @@ import { createLogger } from '@gladysassistant/integration-sdk';
 
 const logger = createLogger({ name: 'format' });
 
-// What the "Last backup" feature holds when the window contains no backup.
-// Deliberately the same word the Gladys interface uses for a feature that has
-// never received a state.
+// What a text feature holds when there is nothing to report: no backup in the
+// window, a guest Proxmox describes with no state at all. Deliberately the same
+// word the Gladys interface uses for a feature that has never received a state.
 export const UNKNOWN_TEXT = 'unknown';
 
 // One Proxmox error string can be a whole shell command plus its output.
@@ -128,6 +128,42 @@ export function formatLastBackup(backup, timezone) {
     return UNKNOWN_TEXT;
   }
   return `${formatTimestamp(backup.starttime, timezone)} (${timezone})`;
+}
+
+/**
+ * Render the "Backup status" text of a node: the verdict, and the reason when
+ * the backup did not go through.
+ *
+ * Text rather than an on/off state, because Proxmox answers with a sentence and
+ * the sentence is what the user needs: "failed — no space left on device" is
+ * actionable where "off" only sends them to the Proxmox task log. The verdict
+ * still follows the configured success scope (`backup.success`), so a
+ * `WARNINGS: n` run reads as a success or as a failure depending on what the
+ * user declared a successful backup to be.
+ * @param {object|null} backup - The last backup, or null when there is none.
+ * @returns {string} "OK", "failed — <reason>", or "unknown".
+ */
+export function formatBackupStatus(backup) {
+  if (!backup) {
+    return UNKNOWN_TEXT;
+  }
+  if (backup.success) {
+    return 'OK';
+  }
+  return `failed — ${formatStatus(backup.status, backup.statusType)}`;
+}
+
+/**
+ * Render the "Status" text of a guest: the state word Proxmox reports.
+ *
+ * `running`, `stopped`, `paused`, `suspended`... — all of them are published as
+ * they come, so a paused VM does not read like a stopped one.
+ * @param {object|null} guest - A normalized guest, or null when it is gone.
+ * @returns {string} The Proxmox state, or "unknown".
+ */
+export function formatGuestStatus(guest) {
+  const status = String(guest?.status ?? '').trim();
+  return status.length > 0 ? status : UNKNOWN_TEXT;
 }
 
 /**

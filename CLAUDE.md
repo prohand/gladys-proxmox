@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A Gladys Assistant **external integration** (Node 20+, ESM, zero runtime deps
 beyond `@gladysassistant/integration-sdk`) that reads one or two Proxmox VE
 clusters and publishes one Gladys device per node (last `vzdump` backup:
-timestamp, duration, success) and one per VM/LXC (running or not). It runs as a
+timestamp, duration, status) and one per VM/LXC (its Proxmox state). It runs as a
 sandboxed container next to Gladys, talking to it over the SDK's WebSocket.
 
 ## Commands
@@ -72,9 +72,23 @@ Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
   the token only ever needs `Sys.Audit` on `/nodes` and `VM.Audit` on `/vms`.
   Do not add a write path.
 - **Unknown beats a plausible lie.** A node with no backup in the window
-  publishes `unknown` on "Last backup" and _nothing at all_ on duration and
-  status; a guest that disappears keeps its last known state instead of being
-  faked to `off`.
+  publishes `unknown` on "Last backup" and on "Backup status", and _nothing at
+  all_ on the duration — a numeric feature cannot say "unknown" and `0 s` would
+  be a lie; a guest that disappears keeps its last known state instead of being
+  faked to `stopped`.
+- **Statuses are text, never binary.** "Backup status" (`OK` /
+  `failed — <what Proxmox said>`) and a guest's "Status" (the Proxmox state word
+  as it comes) are `text`/`text` features. Proxmox answers with a word or a
+  whole error line and a binary feature flattens all of it into "not on" — a
+  paused VM read like a stopped one — while `switch`/`binary` is also the shape
+  Gladys draws for an actuator, which nothing here is. The success scope stays
+  visible through the `OK` / `failed` verdict.
+- **Every feature declares `min` and `max`.** Gladys stores them as NOT NULL
+  columns: a feature that omits them is refused with
+  `422 — t_device_feature.min cannot be null`, and — exactly like an invalid
+  `poll_frequency` — one refused feature rejects the WHOLE publish, so not a
+  single device is registered. Text features carry the neutral `0`/`0`;
+  `textFeature()` in `src/devices/features.js` is where that lives.
 - **Both Proxmox endpoints are permission-FILTERED, not permission-refused.** A
   token missing `Sys.Audit` gets `200` with only its own tasks; one missing
   `VM.Audit` gets `200` with an empty guest list. That silent degradation is why

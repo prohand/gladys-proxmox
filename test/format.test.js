@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  formatBackupStatus,
   formatBackupSummary,
   formatDuration,
+  formatGuestStatus,
   formatLastBackup,
   formatStatus,
   formatTimestamp,
@@ -69,6 +71,44 @@ test('formatLastBackup names the time zone the wall clock belongs to', () => {
 test('formatLastBackup says "unknown" when the node has no backup', () => {
   assert.equal(formatLastBackup(null, 'UTC'), UNKNOWN_TEXT);
   assert.equal(formatLastBackup({ starttime: null }, 'UTC'), UNKNOWN_TEXT);
+});
+
+test('formatBackupStatus gives the verdict AND the reason it failed', () => {
+  assert.equal(formatBackupStatus(BACKUP), 'OK');
+  assert.equal(
+    formatBackupStatus({
+      ...BACKUP,
+      status: "command 'lvcreate' failed: exit code 5",
+      statusType: 'error',
+      success: false,
+    }),
+    "failed — command 'lvcreate' failed: exit code 5",
+  );
+  assert.equal(
+    formatBackupStatus({ ...BACKUP, status: '', statusType: 'unknown', success: false }),
+    'failed — no exit status (worker crashed?)',
+  );
+});
+
+test('formatBackupStatus follows the configured success scope on warnings', () => {
+  const warned = { ...BACKUP, status: 'WARNINGS: 2', statusType: 'warning' };
+  // `success` is what `successStatusTypes()` decided from the configured scope.
+  assert.equal(formatBackupStatus({ ...warned, success: false }), 'failed — WARNINGS: 2');
+  assert.equal(formatBackupStatus({ ...warned, success: true }), 'OK');
+});
+
+test('formatBackupStatus says "unknown" when the node has no backup', () => {
+  assert.equal(formatBackupStatus(null), UNKNOWN_TEXT);
+});
+
+test('formatGuestStatus keeps the Proxmox state word as it comes', () => {
+  // A paused guest must not read like a stopped one, which is exactly what a
+  // binary feature made of both.
+  assert.equal(formatGuestStatus({ status: 'running', running: true }), 'running');
+  assert.equal(formatGuestStatus({ status: 'stopped', running: false }), 'stopped');
+  assert.equal(formatGuestStatus({ status: 'paused', running: false }), 'paused');
+  assert.equal(formatGuestStatus({ status: '  ' }), UNKNOWN_TEXT);
+  assert.equal(formatGuestStatus(null), UNKNOWN_TEXT);
 });
 
 test('formatBackupSummary shows when, how long and how it ended', () => {
