@@ -13,6 +13,7 @@ import { listServers } from '../src/servers.js';
 import { discoverDevices, pollDevice } from '../src/devices/index.js';
 import { fetchLastBackup, resetTypeFilterSupport } from '../src/proxmox/backups.js';
 import { clearGuestsCache, fetchGuests } from '../src/proxmox/guests.js';
+import { fetchDisksHealth, resetSkipSmartSupport } from '../src/proxmox/disks.js';
 import { GLADYS_POLL_FREQUENCIES, resetPollThrottle } from '../src/poll.js';
 import { listNodes } from '../src/proxmox/nodes.js';
 import { refreshNow, testConnection } from '../src/actions.js';
@@ -135,6 +136,51 @@ const RESOURCES = [
   { id: 'storage/pve1/local', type: 'storage', node: 'pve1', status: 'available' },
 ];
 
+// The physical disks of each node: two healthy ones on pve1, a dying one on
+// pve2 — the case the SMART status exists for.
+const DISKS = {
+  pve1: [
+    { devpath: '/dev/sda', model: 'Samsung SSD 870', type: 'ssd', health: 'PASSED' },
+    { devpath: '/dev/nvme0n1', model: 'WD Blue SN570', type: 'nvme', health: 'PASSED' },
+  ],
+  pve2: [{ devpath: '/dev/sdb', model: 'ST4000VN008', type: 'hdd', health: 'FAILED' }],
+};
+
+// ...and what `/disks/smart` answers for each of them: the attribute table of a
+// SATA drive, the text blob of an NVMe one, and a drive reporting no
+// temperature at all.
+const SMART = {
+  '/dev/sda': {
+    type: 'ata',
+    attributes: [
+      { id: 5, name: 'Reallocated_Sector_Ct', raw: '0' },
+      { id: 194, name: 'Temperature_Celsius', raw: '31 (Min/Max 20/45)' },
+    ],
+  },
+  '/dev/nvme0n1': {
+    type: 'text',
+    text: 'SMART/Health Information (NVMe Log 0x02)\nTemperature:      41 Celsius\n',
+  },
+  '/dev/sdb': { type: 'ata', attributes: [{ id: 5, name: 'Reallocated_Sector_Ct', raw: '1024' }] },
+};
+
+/**
+ * Answer `/nodes/{node}/disks/list` like Proxmox does.
+ * @param {string} node - Node name.
+ * @returns {Function} A fake-server handler.
+ */
+function diskRoute(node) {
+  return () => ({ data: DISKS[node] });
+}
+
+/**
+ * Answer `/nodes/{node}/disks/smart` for the disk the query names.
+ * @returns {Function} A fake-server handler.
+ */
+function smartRoute() {
+  return ({ query }) => ({ data: SMART[query.disk] ?? null });
+}
+
 /**
  * Answer a task page like a modern Proxmox does, honouring `typefilter`.
  * @param {object[]} tasks - The tasks of the node.
@@ -153,6 +199,7 @@ function taskRoute(tasks) {
  */
 function startCluster(overrides = {}) {
   resetTypeFilterSupport();
+  resetSkipSmartSupport();
   clearGuestsCache();
   resetPollThrottle();
   return startFakeProxmox({
@@ -161,6 +208,10 @@ function startCluster(overrides = {}) {
     '/nodes/pve2/tasks': taskRoute([]),
     '/nodes/pve1/status': { uptime: 1000 },
     '/nodes/pve2/status': { uptime: 1000 },
+    '/nodes/pve1/disks/list': diskRoute('pve1'),
+    '/nodes/pve2/disks/list': diskRoute('pve2'),
+    '/nodes/pve1/disks/smart': smartRoute(),
+    '/nodes/pve2/disks/smart': smartRoute(),
     '/cluster/resources': RESOURCES,
     ...overrides,
   });
@@ -358,14 +409,14 @@ test('polling a node publishes the last backup, its duration and its status', as
     const { devices } = await discoverDevices(gladys, config);
     await pollDevice(gladys, config, devices[0]);
 
-    assert.equal(gladys.published.length, 3);
     const [lastBackup, status, duration] = gladys.published;
 
     assert.equal(
       lastBackup.device_feature_external_id,
       'ext:proxmox:proxmox-node:pve1:last-backup',
     );
-    assert.match(lastBackup.text, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC\)$/);
+    // The configured format, and no time zone appended to it.
+    assert.match(lastBackup.text, /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/);
     // A text state must go out as `text`, never as a numeric `state`.
     assert.equal(lastBackup.state, undefined);
 
@@ -379,6 +430,216 @@ test('polling a node publishes the last backup, its duration and its status', as
       'ext:proxmox:proxmox-node:pve1:backup-duration',
     );
     assert.equal(duration.state, 248);
+  } finally {
+    await server.close();
+  }
+});
+
+test('polling a node publishes its SMART verdict and one temperature per disk', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  const config = configFor(server.port);
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    await pollDevice(gladys, config, devices[0]);
+
+    const smart = gladys.published.find((state) =>
+      state.device_feature_external_id.endsWith(':smart-status'),
+    );
+    assert.equal(smart.text, 'OK (2 disks)');
+    assert.equal(smart.state, undefined);
+
+    // The temperature of each disk discovered on that node — the SATA one read
+    // from the attribute table, the NVMe one from the smartctl text.
+    assert.deepEqual(
+      gladys.published.filter((state) =>
+        state.device_feature_external_id.includes(':disk-temperature-'),
+      ),
+      [
+        {
+          device_feature_external_id: 'ext:proxmox:proxmox-node:pve1:disk-temperature-nvme0n1',
+          state: 41,
+        },
+        {
+          device_feature_external_id: 'ext:proxmox:proxmox-node:pve1:disk-temperature-sda',
+          state: 31,
+        },
+      ],
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('a discovered node declares one temperature feature per physical disk', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  try {
+    const { devices } = await discoverDevices(gladys, configFor(server.port));
+    const [pve1] = devices;
+
+    assert.deepEqual(
+      pve1.features.map((feature) => feature.name),
+      [
+        'Last backup',
+        'Backup duration',
+        'Backup status',
+        'SMART status',
+        'Disk nvme0n1 temperature',
+        'Disk sda temperature',
+      ],
+    );
+
+    const temperature = pve1.features.at(-1);
+    assert.equal(temperature.unit, 'celsius');
+    assert.equal(temperature.keep_history, true, 'a temperature is worth charting');
+    assert.equal(temperature.read_only, true);
+    // Gladys stores min/max as NOT NULL columns: one feature without them and
+    // the WHOLE publish is refused.
+    for (const feature of pve1.features) {
+      assert.equal(typeof feature.min, 'number');
+      assert.equal(typeof feature.max, 'number');
+    }
+
+    // The disk list is enumerated with `skipsmart`: the health verdict is read
+    // at poll time, discovery only needs the device paths.
+    const listed = server.requests.filter((entry) => entry.path === '/nodes/pve1/disks/list');
+    assert.deepEqual(
+      listed.map((entry) => entry.query),
+      [{ skipsmart: '1' }],
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('a failing disk names itself on the SMART status of its node', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  const config = configFor(server.port);
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    // pve2 holds the dying drive, and no backup at all.
+    await pollDevice(gladys, config, devices[1]);
+
+    assert.deepEqual(gladys.published, [
+      {
+        device_feature_external_id: 'ext:proxmox:proxmox-node:pve2:last-backup',
+        text: 'unknown',
+      },
+      {
+        device_feature_external_id: 'ext:proxmox:proxmox-node:pve2:backup-status',
+        text: 'unknown',
+      },
+      {
+        device_feature_external_id: 'ext:proxmox:proxmox-node:pve2:smart-status',
+        text: 'failed — /dev/sdb: FAILED',
+      },
+    ]);
+    // That drive reports no temperature: nothing at all is published for it,
+    // rather than a 0 °C that would read like a measurement.
+  } finally {
+    await server.close();
+  }
+});
+
+test('a node whose disks cannot be read says unknown, and keeps its backups', async () => {
+  const server = await startCluster({
+    '/nodes/pve1/disks/list': () => ({ status: 403, data: null }),
+  });
+  const gladys = createFakeGladys();
+  const config = configFor(server.port);
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    await pollDevice(gladys, config, devices[0]);
+
+    const smart = gladys.published.find((state) =>
+      state.device_feature_external_id.endsWith(':smart-status'),
+    );
+    assert.equal(smart.text, 'unknown');
+    // The backup features are what the integration exists for: an
+    // under-privileged token on the disks must not cost them.
+    assert.ok(
+      gladys.published.some(
+        (state) =>
+          state.device_feature_external_id.endsWith(':backup-status') && state.text === 'OK',
+      ),
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('disk monitoring turned off reads no disk endpoint and declares no feature', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  const config = configFor(server.port, { disks_monitoring: 'off' });
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    await pollDevice(gladys, config, devices[0]);
+
+    assert.deepEqual(
+      devices[0].features.map((feature) => feature.name),
+      ['Last backup', 'Backup duration', 'Backup status'],
+    );
+    assert.equal(
+      server.requests.filter((entry) => entry.path.includes('/disks/')).length,
+      0,
+      'nothing at all is read from the disks',
+    );
+    assert.equal(
+      gladys.published.filter((state) => state.device_feature_external_id.includes(':smart-'))
+        .length,
+      0,
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('the SMART-only mode reads the health but never runs a smartctl per disk', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  const config = configFor(server.port, { disks_monitoring: 'smart' });
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    await pollDevice(gladys, config, devices[0]);
+
+    assert.deepEqual(
+      devices[0].features.map((feature) => feature.name),
+      ['Last backup', 'Backup duration', 'Backup status', 'SMART status'],
+    );
+    assert.equal(
+      server.requests.filter((entry) => entry.path === '/nodes/pve1/disks/smart').length,
+      0,
+      'the temperature is the expensive half: it is only read when asked for',
+    );
+    assert.ok(
+      gladys.published.some(
+        (state) =>
+          state.device_feature_external_id.endsWith(':smart-status') &&
+          state.text === 'OK (2 disks)',
+      ),
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('one unreadable disk does not cost the temperature of the others', async () => {
+  const server = await startCluster({
+    '/nodes/pve1/disks/smart': ({ query }) =>
+      query.disk === '/dev/sda' ? { status: 500, data: null } : { data: SMART[query.disk] },
+  });
+  try {
+    const disks = await fetchDisksHealth(serverFor(server.port), 'pve1');
+    assert.deepEqual(
+      disks.map((disk) => [disk.devpath, disk.healthy, disk.temperature]),
+      [
+        ['/dev/nvme0n1', true, 41],
+        ['/dev/sda', true, null],
+      ],
+    );
   } finally {
     await server.close();
   }
@@ -460,7 +721,8 @@ test('a device just added is read at once, without waiting for the next tick', a
 test('a node with no backup publishes "unknown" and leaves the duration unknown', async () => {
   const server = await startCluster();
   const gladys = createFakeGladys();
-  const config = configFor(server.port);
+  // Disks off: what this test is about is the BACKUP features of an idle node.
+  const config = configFor(server.port, { disks_monitoring: 'off' });
   try {
     const { devices } = await discoverDevices(gladys, config);
     await pollDevice(gladys, config, devices[1]);
@@ -562,6 +824,36 @@ test('test_connection confirms the read access node by node, and counts the gues
     assert.match(message.en, /Connection OK/);
     assert.match(message.en, /pve1, pve2/);
     assert.match(message.en, /3 VM\/LXC visible/);
+    // Two disks on pve1, one on pve2.
+    assert.match(message.en, /3 disk\(s\) readable for the SMART status/);
+    assert.match(message.fr, /3 disque\(s\) lisible\(s\)/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('test_connection names the nodes whose disks the token cannot read', async () => {
+  // Unlike the task list, `/disks/list` is refused rather than filtered: the
+  // poll can only say "unknown", so the test is where the 403 gets named.
+  const server = await startCluster({
+    '/nodes/pve2/disks/list': () => ({ status: 403, data: null }),
+  });
+  try {
+    const message = await testConnection(configFor(server.port));
+    assert.match(message.en, /The disk list could not be read on: pve2/);
+    assert.match(message.fr, /La liste des disques/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('test_connection says nothing about the disks when they are not monitored', async () => {
+  const server = await startCluster();
+  try {
+    const message = await testConnection(configFor(server.port, { disks_monitoring: 'off' }));
+    assert.match(message.en, /Connection OK/);
+    assert.doesNotMatch(message.en, /disk/);
+    assert.equal(server.requests.filter((entry) => entry.path.includes('/disks/')).length, 0);
   } finally {
     await server.close();
   }
@@ -638,6 +930,9 @@ function startSecondCluster() {
     '/nodes': SECOND_NODES,
     '/nodes/pve1/tasks': taskRoute([TASKS[1]]),
     '/nodes/pve1/status': { uptime: 2000 },
+    // This one's token cannot read the disks: unlike the task list, Proxmox
+    // really does refuse that endpoint instead of filtering it.
+    '/nodes/pve1/disks/list': () => ({ status: 403, data: null }),
     '/cluster/resources': SECOND_RESOURCES,
   });
 }
@@ -697,8 +992,11 @@ test('a device of the second server is polled against the second server', async 
         'ext:proxmox:proxmox-node:2@pve1:last-backup',
         'ext:proxmox:proxmox-node:2@pve1:backup-status',
         'ext:proxmox:proxmox-node:2@pve1:backup-duration',
+        'ext:proxmox:proxmox-node:2@pve1:smart-status',
       ],
     );
+    // That server's token cannot read the disks: "unknown", not a fake verdict.
+    assert.equal(gladys.published.at(-1).text, 'unknown');
 
     // The guest of the same VMID reports the state of ITS cluster: stopped
     // here, running on the first server.

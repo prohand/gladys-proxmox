@@ -1,8 +1,9 @@
 # Proxmox
 
 Surveillez les **sauvegardes** de vos nœuds Proxmox VE depuis Gladys — quand la
-dernière a eu lieu, combien de temps elle a duré et si elle a réussi — ainsi que
-l'**état de marche de chaque machine virtuelle et conteneur LXC**.
+dernière a eu lieu, combien de temps elle a duré et si elle a réussi — l'**état
+SMART et la température de leurs disques**, ainsi que l'**état de marche de
+chaque machine virtuelle et conteneur LXC**.
 
 Cette intégration est **strictement en lecture seule**. Elle n'effectue que des
 requêtes `GET` sur l'API Proxmox VE — elle ne démarre, n'arrête, ne migre, ne
@@ -14,11 +15,19 @@ Après l'installation, un appareil Gladys apparaît par nœud Proxmox, nommé
 `Proxmox <nœud>`, portant trois fonctionnalités en lecture seule décrivant sa
 **dernière sauvegarde** (une tâche `vzdump` Proxmox) :
 
-| Fonctionnalité      | Type           | Contenu                                                                                                                                    |
-| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Last backup**     | Texte          | Le début de la dernière sauvegarde, dans votre fuseau — ex. `2026-08-19 02:00:00 (Europe/Paris)`. Vaut `unknown` si le nœud n'en a aucune. |
-| **Backup duration** | Capteur entier | La durée de cette sauvegarde, en secondes. Historisée : vous pouvez en tracer la courbe et déclencher des scènes dessus.                   |
-| **Backup status**   | Texte          | `OK`, ou `failed — ` suivi de ce que Proxmox a dit — ex. `failed — command 'lvcreate' failed: exit code 5`.                                |
+| Fonctionnalité      | Type           | Contenu                                                                                                                                                 |
+| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Last backup**     | Texte          | Le début de la dernière sauvegarde, dans votre fuseau et au format de date choisi — ex. `16/08/2026 11:25:04`. Vaut `unknown` si le nœud n'en a aucune. |
+| **Backup duration** | Capteur entier | La durée de cette sauvegarde, en secondes. Historisée : vous pouvez en tracer la courbe et déclencher des scènes dessus.                                |
+| **Backup status**   | Texte          | `OK`, ou `failed — ` suivi de ce que Proxmox a dit — ex. `failed — command 'lvcreate' failed: exit code 5`.                                             |
+
+Sauf si vous désactivez la _Surveillance des disques_, le même appareil porte
+aussi l'état des **disques physiques** du nœud :
+
+| Fonctionnalité               | Type                   | Contenu                                                                                                                                  |
+| ---------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **SMART status**             | Texte                  | `OK (3 disks)` si tous les disques passent, `failed — /dev/sdb: FAILED` si l'un d'eux échoue, `unknown` si aucun verdict n'a pu être lu. |
+| **Disk `<nom>` temperature** | Capteur de température | Un capteur par disque trouvé à la découverte du nœud — `Disk sda temperature`, `Disk nvme0n1 temperature` — en °C, historisé.            |
 
 Et un appareil Gladys par machine virtuelle et par conteneur LXC, nommé
 `Proxmox <nom> (<vmid>)` :
@@ -95,10 +104,10 @@ Si vous n'avez qu'un seul Proxmox, laissez le second bloc vide : rien ne change.
 C'est le point à ne pas rater. L'intégration a besoin de **deux privilèges
 d'audit (lecture)**, et de rien d'autre :
 
-| Privilège     | Sur le chemin     | Pourquoi                                                      |
-| ------------- | ----------------- | ------------------------------------------------------------- |
-| **Sys.Audit** | `/nodes` (ou `/`) | Lire le journal des tâches des nœuds, et lire leur statut.    |
-| **VM.Audit**  | `/vms` (ou `/`)   | Voir les machines virtuelles et les conteneurs, et leur état. |
+| Privilège     | Sur le chemin     | Pourquoi                                                            |
+| ------------- | ----------------- | ------------------------------------------------------------------- |
+| **Sys.Audit** | `/nodes` (ou `/`) | Lire le journal des tâches des nœuds, leur statut et leurs disques. |
+| **VM.Audit**  | `/vms` (ou `/`)   | Voir les machines virtuelles et les conteneurs, et leur état.       |
 
 Rien d'autre. Aucun `Datastore.*`, aucun `Sys.Modify`, aucun `VM.PowerMgmt`,
 aucun `Sys.Console`, aucun accès root, aucun accès shell.
@@ -110,6 +119,8 @@ aucun `Sys.Console`, aucun accès root, aucun accès shell.
 | `/api2/json/nodes`                     | GET     | aucun (tout jeton authentifié)     |
 | `/api2/json/nodes/{node}/tasks`        | GET     | `Sys.Audit` sur `/nodes/{node}` \* |
 | `/api2/json/nodes/{node}/status`       | GET     | `Sys.Audit` sur `/nodes/{node}`    |
+| `/api2/json/nodes/{node}/disks/list`   | GET     | `Sys.Audit` sur `/nodes/{node}` †  |
+| `/api2/json/nodes/{node}/disks/smart`  | GET     | `Sys.Audit` sur `/nodes/{node}` †  |
 | `/api2/json/cluster/resources?type=vm` | GET     | `VM.Audit` sur `/vms/{vmid}` \*    |
 
 \* **Subtilité importante.** Ces deux listes sont _filtrées_ par les droits,
@@ -123,6 +134,11 @@ n'apparaît. C'est la raison d'être du bouton **Tester la connexion** : il
 interroge `/nodes/{node}/status` (qui, lui, renvoie bien `403`), vous indique
 précisément quels nœuds manquent du privilège, et combien d'invités le jeton
 voit réellement.
+
+† Appelés uniquement si la _Surveillance des disques_ est active. Ces deux-là,
+contrairement aux listes ci-dessus, sont bel et bien refusés par un `403` : un
+jeton sans `Sys.Audit` obtient `unknown` sur l'état SMART, et **Tester la
+connexion** nomme les nœuds qu'il n'a pas pu lire.
 
 ### Option A — le rôle intégré `PVEAuditor` (le plus simple)
 
@@ -217,20 +233,22 @@ curl -sS --insecure \
 
 ## Configuration
 
-| Champ                                          | Requis | Défaut  | Remarques                                                                                                                        |
-| ---------------------------------------------- | ------ | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Nom de ce Proxmox**                          | non    | Proxmox | Préfixe le nom de chaque appareil de ce serveur. Le second bloc utilise `Proxmox 2` par défaut.                                  |
-| **Hôte Proxmox**                               | oui    | —       | IP ou nom d'hôte de n'importe quel nœud — un nœud répond pour tout le cluster. Une URL collée fonctionne aussi, voir ci-dessous. |
-| **Port de l'API**                              | non    | `8006`  | Le port de l'API Proxmox VE.                                                                                                     |
-| **Identifiant du jeton d'API**                 | oui    | —       | La forme complète `utilisateur@realm!nomdujeton`, ex. `gladys@pve!tasks`.                                                        |
-| **Secret du jeton d'API**                      | oui    | —       | La valeur affichée une seule fois par Proxmox. Stockée chiffrée par Gladys, jamais renvoyée à votre navigateur.                  |
-| **Empreinte du certificat TLS**                | non    | vide    | Empreinte SHA-256 du certificat du nœud. Voir plus bas.                                                                          |
-| **Vérifier le certificat TLS**                 | non    | activé  | À laisser activé. Voir plus bas.                                                                                                 |
-| **Nœuds à surveiller**                         | non    | tous    | Noms séparés par des virgules, ex. `pve1, pve2`. Filtre aussi les VM/LXC remontées.                                              |
-| **Ancienneté maximale d'une sauvegarde**       | non    | `7` j   | La dernière sauvegarde est recherchée dans cette fenêtre.                                                                        |
-| **Ce qui compte comme une sauvegarde réussie** | non    | OK seul | Si une sauvegarde terminée en `WARNINGS: n` compte quand même comme réussie.                                                     |
-| **Fuseau horaire**                             | non    | hôte    | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                                        |
-| **Intervalle de rafraîchissement**             | non    | `300` s | Fréquence de lecture de Proxmox, entre 60 s et une heure.                                                                        |
+| Champ                                          | Requis | Défaut                     | Remarques                                                                                                                        |
+| ---------------------------------------------- | ------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Nom de ce Proxmox**                          | non    | Proxmox                    | Préfixe le nom de chaque appareil de ce serveur. Le second bloc utilise `Proxmox 2` par défaut.                                  |
+| **Hôte Proxmox**                               | oui    | —                          | IP ou nom d'hôte de n'importe quel nœud — un nœud répond pour tout le cluster. Une URL collée fonctionne aussi, voir ci-dessous. |
+| **Port de l'API**                              | non    | `8006`                     | Le port de l'API Proxmox VE.                                                                                                     |
+| **Identifiant du jeton d'API**                 | oui    | —                          | La forme complète `utilisateur@realm!nomdujeton`, ex. `gladys@pve!tasks`.                                                        |
+| **Secret du jeton d'API**                      | oui    | —                          | La valeur affichée une seule fois par Proxmox. Stockée chiffrée par Gladys, jamais renvoyée à votre navigateur.                  |
+| **Empreinte du certificat TLS**                | non    | vide                       | Empreinte SHA-256 du certificat du nœud. Voir plus bas.                                                                          |
+| **Vérifier le certificat TLS**                 | non    | activé                     | À laisser activé. Voir plus bas.                                                                                                 |
+| **Nœuds à surveiller**                         | non    | tous                       | Noms séparés par des virgules, ex. `pve1, pve2`. Filtre aussi les VM/LXC remontées.                                              |
+| **Ancienneté maximale d'une sauvegarde**       | non    | `7` j                      | La dernière sauvegarde est recherchée dans cette fenêtre.                                                                        |
+| **Ce qui compte comme une sauvegarde réussie** | non    | OK seul                    | Si une sauvegarde terminée en `WARNINGS: n` compte quand même comme réussie.                                                     |
+| **Fuseau horaire**                             | non    | hôte                       | Fuseau IANA utilisé pour l'affichage, ex. `Europe/Paris`.                                                                        |
+| **Format de date**                             | non    | `16/08/2026 11:25:04`      | Façon d'écrire cet horodatage : jour d'abord, mois d'abord, ISO, ou ISO suivi du fuseau.                                         |
+| **Surveillance des disques (SMART)**           | non    | État SMART et températures | Ce qui est lu des disques physiques — voir plus bas.                                                                             |
+| **Intervalle de rafraîchissement**             | non    | `300` s                    | Fréquence de lecture de Proxmox, entre 60 s et une heure.                                                                        |
 
 _Hôte Proxmox_ attend un nom d'hôte ou une adresse IP, mais l'adresse que vous
 avez sous les yeux est celle de votre navigateur : une URL collée est donc
@@ -242,8 +260,39 @@ l'API_.
 Les six premiers champs existent **deux fois** : une fois pour le premier
 Proxmox, une fois pour le second (optionnel). Seuls l'hôte et le jeton du
 premier serveur sont obligatoires. _Ancienneté maximale d'une sauvegarde_, _Ce
-qui compte comme une sauvegarde réussie_, _Fuseau horaire_ et _Intervalle de
-rafraîchissement_ se règlent une seule fois et s'appliquent à tous les serveurs.
+qui compte comme une sauvegarde réussie_, _Fuseau horaire_, _Format de date_,
+_Surveillance des disques_ et _Intervalle de rafraîchissement_ se règlent une
+seule fois et s'appliquent à tous les serveurs.
+
+L'heure est toujours affichée sur 24 heures, et le fuseau n'est pas répété sur
+la tuile — vous savez dans lequel vous vivez. Choisissez la dernière option de
+_Format de date_ si vous voulez qu'il soit indiqué, par exemple si le Proxmox et
+la personne qui lit le tableau de bord ne sont pas dans le même pays.
+
+### Surveillance des disques
+
+_Surveillance des disques_ propose trois réglages :
+
+- **État SMART et températures** (par défaut) — le verdict de santé de chaque
+  disque, et un capteur de température par disque. Lire les verdicts coûte une
+  requête par nœud ; les températures une requête de plus par disque, chacune
+  exécutant un `smartctl` côté Proxmox.
+- **État SMART uniquement** — les verdicts, et rien d'autre. Une requête par
+  nœud, aucun `smartctl` par disque.
+- **Désactivé** — les disques ne sont jamais lus, et les appareils des nœuds ne
+  portent que leurs fonctionnalités de sauvegarde.
+
+Les deux lectures nécessitent `Sys.Audit` sur `/nodes`, exactement comme les
+sauvegardes — _Tester la connexion_ vous indique combien de disques le jeton
+peut lire, et nomme les nœuds où il n'y arrive pas. Un disque sans verdict SMART
+(un contrôleur que `smartctl` ne connaît pas, un boîtier USB) est compté à part
+plutôt que signalé en échec, et un nœud dont la liste des disques est illisible
+affiche `unknown` sans jamais coûter à ce nœud ses fonctionnalités de
+sauvegarde.
+
+Les capteurs de température sont créés à la découverte du nœud. Ajoutez ou
+remplacez un disque, et il obtient son capteur à la prochaine recherche (onglet
+Découverte, ou un enregistrement de la configuration).
 
 Gladys ne sait pas demander un rafraîchissement moins souvent qu'une fois par
 minute : c'est donc l'intégration qui tient le reste de l'attente. Elle est
@@ -312,10 +361,10 @@ une sauvegarde encore en cours n'est pas encore la dernière sauvegarde.
 
 - **Tester la connexion** — vérifie que l'hôte répond, que le jeton d'API est
   accepté, qu'il peut réellement lire le journal des tâches de chaque nœud
-  surveillé, et combien de VM/LXC il voit. À lancer en premier dès que quelque
-  chose semble anormal.
-- **Rafraîchir maintenant** — lit les sauvegardes et l'état des VM/LXC
-  immédiatement, sans attendre le prochain rafraîchissement.
+  surveillé, combien de VM/LXC il voit et de combien de disques il peut lire les
+  données SMART. À lancer en premier dès que quelque chose semble anormal.
+- **Rafraîchir maintenant** — lit les sauvegardes, les disques et l'état des
+  VM/LXC immédiatement, sans attendre le prochain rafraîchissement.
 
 Les deux s'exécutent sur chaque serveur configuré et préfixent chaque résultat
 par `[<nom>]` dès qu'il y en a deux — un message comme
@@ -384,7 +433,19 @@ sur leur dernière valeur connue, jusqu'à ce que vous les supprimiez dans Glady
 **Les horodatages sont décalés de quelques heures** — renseignez le champ
 _Fuseau horaire_ avec votre fuseau IANA (`Europe/Paris`, `America/New_York`…).
 Laissé vide, l'intégration utilise le fuseau de la machine où tourne Gladys,
-qui est souvent UTC dans un conteneur.
+qui est souvent UTC dans un conteneur. _Format de date_ décide de la façon dont
+cette date est écrite, et si le fuseau est affiché à côté.
+
+**« SMART status » reste `unknown`** — soit le jeton ne peut pas lire
+`/nodes/{node}/disks/list` (lancez **Tester la connexion** : il nomme les
+nœuds), soit `smartctl` n'a aucun verdict pour ces disques — un contrôleur RAID
+qui masque ses membres, un boîtier USB. Les disques derrière un contrôleur RAID
+matériel ne sont pas visibles de Proxmox du tout.
+
+**Un disque n'a pas de capteur de température** — il a été ajouté après la
+découverte du nœud : lancez une nouvelle recherche depuis l'onglet Découverte,
+ou enregistrez la configuration. Un disque qui ne rapporte aucune température
+(certains SAS et USB) ne publie rien plutôt qu'un faux `0 °C`.
 
 L'intégration journalise tout ce qu'elle fait : consultez les logs de
 l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte), avec

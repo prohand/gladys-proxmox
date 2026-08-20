@@ -1,13 +1,15 @@
 // -----------------------------------------------------------------------------
 // Manifest actions: the buttons of the Configuration screen.
 //
-// `test_connection` is the important one. Both Proxmox endpoints this
-// integration reads are permission-FILTERED rather than permission-checked: a
-// token without `Sys.Audit` on `/nodes/<node>` gets a 200 with only its own
-// tasks in it, and a token without `VM.Audit` gets a 200 with an empty guest
-// list. An under-privileged setup therefore looks like "everything works, this
-// node simply never backs anything up". This action probes each node explicitly
-// and names what is missing.
+// `test_connection` is the important one. The two LISTS this integration reads
+// are permission-FILTERED rather than permission-checked: a token without
+// `Sys.Audit` on `/nodes/<node>` gets a 200 with only its own tasks in it, and a
+// token without `VM.Audit` gets a 200 with an empty guest list. An
+// under-privileged setup therefore looks like "everything works, this node
+// simply never backs anything up". This action probes each node explicitly and
+// names what is missing. The disk endpoints are the other way round — they
+// answer 403 — but the poll swallows that into an "unknown" SMART status, so
+// this is where the refusal gets named too.
 //
 // Both actions run on EVERY configured Proxmox server, and say which one they
 // are talking about as soon as there is more than one.
@@ -17,6 +19,7 @@ import { createLogger } from '@gladysassistant/integration-sdk';
 import { ProxmoxError } from './proxmox/client.js';
 import { listNodes, probeNodeAudit } from './proxmox/nodes.js';
 import { fetchGuests } from './proxmox/guests.js';
+import { listDisks, readsDisks } from './proxmox/disks.js';
 import { listServers } from './servers.js';
 import { pollAllDevices } from './devices/index.js';
 import { formatBackupSummary, resolveTimezone } from './format.js';
@@ -150,6 +153,52 @@ async function describeGuestVisibility(server) {
 }
 
 /**
+ * Count the disks the token can read, node by node.
+ *
+ * `/nodes/{node}/disks/list` is one of the two endpoints Proxmox really does
+ * refuse (403) instead of silently filtering, so this is the place where an
+ * under-privileged token is named — the poll itself only reports "unknown" on
+ * the SMART status, which reads like a node with no SMART data.
+ * @param {object} server - A configured server.
+ * @param {{node: string}[]} nodes - The nodes of that server.
+ * @returns {Promise<{en: string, fr: string}>} The sentence appended to the test result.
+ */
+async function describeDiskVisibility(server, nodes) {
+  if (!readsDisks(server)) {
+    return { en: '', fr: '' };
+  }
+
+  const reads = await Promise.all(
+    nodes.map(async ({ node }) => {
+      try {
+        return { node, disks: await listDisks(server, node, { skipSmart: true }) };
+      } catch (error) {
+        logger.warn(`test_connection: the disks of ${node} (${server.label}) could not be read`);
+        return { node, error };
+      }
+    }),
+  );
+
+  const failed = reads.filter((read) => read.error);
+  const total = reads
+    .filter((read) => !read.error)
+    .reduce((count, read) => count + read.disks.length, 0);
+
+  if (failed.length === 0) {
+    return {
+      en: ` ${total} disk(s) readable for the SMART status.`,
+      fr: ` ${total} disque(s) lisible(s) pour l'état SMART.`,
+    };
+  }
+  const names = failed.map((read) => read.node).join(', ');
+  const reason = failed[0].error.message;
+  return {
+    en: ` The disk list could not be read on: ${names} (${reason}).`,
+    fr: ` La liste des disques n'a pas pu être lue sur : ${names} (${reason}).`,
+  };
+}
+
+/**
  * Run the connection test against ONE server.
  * @param {object} server - A configured server.
  * @returns {Promise<{en: string, fr: string}>} What that server answered.
@@ -174,11 +223,12 @@ async function testServer(server) {
   const granted = probes.filter((probe) => probe.granted).map((probe) => probe.node);
   const denied = probes.filter((probe) => !probe.granted).map((probe) => probe.node);
   const guestsMessage = await describeGuestVisibility(server);
+  const disksMessage = await describeDiskVisibility(server, nodes);
 
   if (denied.length === 0) {
     return {
-      en: `Connection OK. Read access granted on ${granted.length} node(s): ${granted.join(', ')}.${guestsMessage.en}`,
-      fr: `Connexion OK. Accès en lecture accordé sur ${granted.length} nœud(s) : ${granted.join(', ')}.${guestsMessage.fr}`,
+      en: `Connection OK. Read access granted on ${granted.length} node(s): ${granted.join(', ')}.${guestsMessage.en}${disksMessage.en}`,
+      fr: `Connexion OK. Accès en lecture accordé sur ${granted.length} nœud(s) : ${granted.join(', ')}.${guestsMessage.fr}${disksMessage.fr}`,
     };
   }
 
@@ -190,10 +240,10 @@ async function testServer(server) {
   return {
     en:
       `Connected, but the token cannot read the task log of: ${denied.join(', ')}.` +
-      ` Grant Sys.Audit (role PVEAuditor) on /nodes to ${server.token_id}.${grantedPart}${guestsMessage.en}`,
+      ` Grant Sys.Audit (role PVEAuditor) on /nodes to ${server.token_id}.${grantedPart}${guestsMessage.en}${disksMessage.en}`,
     fr:
       `Connexion établie, mais le jeton ne peut pas lire le journal des tâches de : ${denied.join(', ')}.` +
-      ` Accordez Sys.Audit (rôle PVEAuditor) sur /nodes à ${server.token_id}.${grantedPartFr}${guestsMessage.fr}`,
+      ` Accordez Sys.Audit (rôle PVEAuditor) sur /nodes à ${server.token_id}.${grantedPartFr}${guestsMessage.fr}${disksMessage.fr}`,
   };
 }
 
@@ -223,16 +273,17 @@ export async function testConnection(config) {
  * @param {object} server - The server.
  * @param {object[]} results - Its results, as returned by `pollAllDevices()`.
  * @param {string} timezone - A resolved IANA time zone.
+ * @param {string} dateFormat - The configured date format.
  * @returns {{en: string, fr: string}} The summary.
  */
-function summarizeServer(server, results, timezone) {
+function summarizeServer(server, results, timezone, dateFormat) {
   const failed = results.filter((result) => result.error);
   const nodes = results.filter((result) => result.kind === 'node' && !result.error);
   const guests = results.filter((result) => result.kind === 'guest' && !result.error);
   const running = guests.filter((result) => result.guest?.running).length;
 
   const backups = nodes
-    .map((result) => formatBackupSummary(result.node, result.backup, timezone))
+    .map((result) => formatBackupSummary(result.node, result.backup, timezone, dateFormat))
     .join(' | ');
   const guestSummary =
     guests.length > 0 ? ` ${running}/${guests.length} VM/LXC running.` : ' No VM/LXC monitored.';
@@ -291,7 +342,7 @@ export async function refreshNow(gladys, config) {
     .map((entry) =>
       withServerLabel(
         entry.server,
-        summarizeServer(entry.server, entry.results, timezone),
+        summarizeServer(entry.server, entry.results, timezone, config.date_format),
         servers.length > 1,
       ),
     );

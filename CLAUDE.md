@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A Gladys Assistant **external integration** (Node 20+, ESM, zero runtime deps
 beyond `@gladysassistant/integration-sdk`) that reads one or two Proxmox VE
 clusters and publishes one Gladys device per node (last `vzdump` backup:
-timestamp, duration, status) and one per VM/LXC (its Proxmox state). It runs as a
+timestamp, duration, status — plus the SMART verdict of its disks and one
+temperature sensor per disk) and one per VM/LXC (its Proxmox state). It runs as a
 sandboxed container next to Gladys, talking to it over the SDK's WebSocket.
 
 ## Commands
@@ -45,7 +46,7 @@ holds no Proxmox logic. Three layers below it:
   pulling in `undici`). It throws `ProxmoxError` with a `kind`
   (`auth`/`permission`/`tls`/`network`/`timeout`/`http`/`parse`); every layer
   above dispatches on that `kind`, never on the message. `nodes.js`,
-  `backups.js`, `guests.js` each own one endpoint.
+  `backups.js`, `guests.js`, `disks.js` each own one endpoint family.
 - `src/devices/` — Gladys device shapes. `index.js` is the registry: devices are
   **discovered**, not static, and it maps a Gladys `external_id` back to a
   server plus a node name or a guest key so `onPoll` reaches the right reader
@@ -59,7 +60,8 @@ holds no Proxmox logic. Three layers below it:
   about there being several. It also owns the external-id scoping
   (`scopeId()` / `parseScopedId()`).
 - `src/config.js`, `src/format.js`, `src/actions.js` — normalization/bounds,
-  timezone and duration rendering, and the Configuration-screen buttons.
+  timezone/date-format and duration rendering, and the Configuration-screen
+  buttons.
 
 Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
 `discoverDevices()` (per configured server) → `publishDiscoveredDevices()`;
@@ -77,8 +79,9 @@ it.
 - **Unknown beats a plausible lie.** A node with no backup in the window
   publishes `unknown` on "Last backup" and on "Backup status", and _nothing at
   all_ on the duration — a numeric feature cannot say "unknown" and `0 s` would
-  be a lie; a guest that disappears keeps its last known state instead of being
-  faked to `stopped`.
+  be a lie; same for a disk that reports no temperature, and a disk with no SMART
+  verdict is counted apart rather than read as failing; a guest that disappears
+  keeps its last known state instead of being faked to `stopped`.
 - **Statuses are text, never binary.** "Backup status" (`OK` /
   `failed — <what Proxmox said>`) and a guest's "Status" (the Proxmox state word
   as it comes) are `text`/`text` features. Proxmox answers with a word or a
@@ -92,7 +95,15 @@ it.
   `poll_frequency` — one refused feature rejects the WHOLE publish, so not a
   single device is registered. Text features carry the neutral `0`/`0`;
   `textFeature()` in `src/devices/features.js` is where that lives.
-- **Both Proxmox endpoints are permission-FILTERED, not permission-refused.** A
+- **The disks are read best-effort, never at the backups' expense.** The disk
+  list is read inside `pollNode()` through `readDisks()`, which turns ANY failure
+  into an "unknown" SMART status: an under-privileged token or a controller
+  smartctl knows nothing about must not cost that node its backup states. The
+  per-disk temperatures go out in their OWN `publishStates()` call for the same
+  reason — their features are the ones DISCOVERED on that node, so a disk plugged
+  in since then would take the whole batch down with it.
+- **Both Proxmox LIST endpoints are permission-FILTERED, not permission-refused.**
+  (`/nodes/{node}/disks/*` is the exception: it really does answer 403.) A
   token missing `Sys.Audit` gets `200` with only its own tasks; one missing
   `VM.Audit` gets `200` with an empty guest list. That silent degradation is why
   `probeNodeAudit()` (`GET /nodes/{node}/status`, which does return `403`)
@@ -116,7 +127,8 @@ it.
   names the server that failed while the other keeps polling.
 - **Portability fallbacks are cached, not retried.** A node that answers `400`
   to `typefilter=vzdump` is remembered in `backups.js` and filtered client-side
-  from then on. `/cluster/resources` answers are cached ~15 s so one poll round
+  from then on; a node that answers `400` to `skipsmart` is remembered in
+  `disks.js` and read without it from then on. `/cluster/resources` answers are cached ~15 s so one poll round
   of a 40-guest cluster is one request; `force: true` / `clearGuestsCache()`
   bypass it for discovery and explicit refreshes.
 - **User-facing strings are bilingual** `{ en, fr }` objects — connection status
@@ -146,5 +158,5 @@ ephemeral port — two of them, for the multi-server tests — so TLS posture, t
 query string and the `401`/`403` mapping are exercised on the wire rather than
 mocked. `test/helpers/fakeGladys.js` is an in-memory stand-in for the SDK
 recording `publishStates` / `setConnectionStatus`. Module-level caches
-(`clearGuestsCache()`, `resetTypeFilterSupport()`) leak between tests — reset
-them in `beforeEach`.
+(`clearGuestsCache()`, `resetTypeFilterSupport()`, `resetSkipSmartSupport()`)
+leak between tests — reset them in `beforeEach`.

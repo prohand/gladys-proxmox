@@ -2,11 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_CONFIG,
+  DISKS_MONITORING,
   isConfigured,
   normalizeConfig,
   parseHost,
   splitList,
 } from '../src/config.js';
+import { DATE_FORMATS } from '../src/format.js';
 
 test('normalizeConfig returns the defaults when called with no argument', () => {
   assert.deepEqual(normalizeConfig(), DEFAULT_CONFIG);
@@ -65,6 +67,27 @@ test('only an explicit false turns the TLS verification off', () => {
   assert.equal(normalizeConfig({ tls_verify: undefined }).tls_verify, true);
   assert.equal(normalizeConfig({ tls_verify: true }).tls_verify, true);
   assert.equal(normalizeConfig({ tls_verify: false }).tls_verify, false);
+});
+
+test('date_format only accepts a declared layout', () => {
+  assert.equal(normalizeConfig({ date_format: 'year_month_day' }).date_format, 'year_month_day');
+  // The default is the day-first form: the one this integration's users read.
+  assert.equal(normalizeConfig().date_format, DATE_FORMATS.DAY_MONTH_YEAR);
+  assert.equal(normalizeConfig({ date_format: 'dd.mm' }).date_format, DATE_FORMATS.DAY_MONTH_YEAR);
+});
+
+test('disks_monitoring only accepts a declared mode', () => {
+  assert.equal(normalizeConfig({ disks_monitoring: 'smart' }).disks_monitoring, 'smart');
+  assert.equal(normalizeConfig({ disks_monitoring: 'off' }).disks_monitoring, 'off');
+  assert.equal(
+    normalizeConfig().disks_monitoring,
+    DISKS_MONITORING.SMART_AND_TEMPERATURE,
+    'the health and the temperatures are read unless the user says otherwise',
+  );
+  assert.equal(
+    normalizeConfig({ disks_monitoring: 'everything' }).disks_monitoring,
+    DISKS_MONITORING.SMART_AND_TEMPERATURE,
+  );
 });
 
 test('backup_success_scope only accepts the two declared options', () => {

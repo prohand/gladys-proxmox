@@ -4,15 +4,17 @@
 // Unlike the static registry of the official template, the device list here is
 // DISCOVERED: one Gladys device per Proxmox node, plus one per QEMU virtual
 // machine and LXC container, and none of them is known before `GET /nodes` and
-// `GET /cluster/resources` have answered — on EACH configured server. This
-// module owns that list and the mapping back from a Gladys `external_id` to
-// what it stands for (which server, and what on it), which is what routes
-// `onPoll` to the right reader.
+// `GET /cluster/resources` have answered — on EACH configured server. The disks
+// of a node are discovered the same way, because each of them becomes one
+// temperature feature of its node's device. This module owns that list and the
+// mapping back from a Gladys `external_id` to what it stands for (which server,
+// and what on it), which is what routes `onPoll` to the right reader.
 // -----------------------------------------------------------------------------
 
 import { createLogger } from '@gladysassistant/integration-sdk';
 import { listNodes } from '../proxmox/nodes.js';
 import { clearGuestsCache, fetchGuests, parseGuestKey } from '../proxmox/guests.js';
+import { listDisks, readsDiskTemperature } from '../proxmox/disks.js';
 import { listServers, parseScopedId, serverById } from '../servers.js';
 import { claimPoll, markPolled, resetPollThrottle } from '../poll.js';
 import {
@@ -80,6 +82,37 @@ export function describeDevice(gladys, device) {
 }
 
 /**
+ * The disks of every node, when the configuration asks for their temperature.
+ *
+ * One temperature feature is declared PER DISK, so discovery is the moment the
+ * disks have to be enumerated. `skipsmart` keeps that enumeration cheap — the
+ * health verdict is read at poll time, not here — and a node whose disk list
+ * cannot be read simply gets no temperature feature instead of failing the
+ * whole discovery of that server: its backup features matter more.
+ * @param {object} server - A configured server.
+ * @param {{node: string}[]} nodes - The nodes of that server.
+ * @returns {Promise<Map<string, object[]>>} The disks, by node name.
+ */
+async function discoverDisks(server, nodes) {
+  const byNode = new Map();
+  if (!readsDiskTemperature(server)) {
+    return byNode;
+  }
+  for (const { node } of nodes) {
+    try {
+      byNode.set(node, await listDisks(server, node, { skipSmart: true }));
+    } catch (error) {
+      logger.warn(
+        `${server.label}: the disks of ${node} could not be listed (${error.message}): ` +
+          'no temperature feature for that node.',
+      );
+      byNode.set(node, []);
+    }
+  }
+  return byNode;
+}
+
+/**
  * Discover the nodes and guests of ONE server, and build their payloads.
  * @param {object} gladys - The SDK instance.
  * @param {object} server - A configured server.
@@ -89,6 +122,7 @@ async function discoverServer(gladys, server) {
   const nodes = await listNodes(server);
   // A discovery must never answer from a snapshot taken minutes ago.
   const guests = await fetchGuests(server, { force: true });
+  const disksByNode = await discoverDisks(server, nodes);
 
   for (const { node } of nodes) {
     knownDevices.set(nodeExternalIds(gladys, server, node).device, {
@@ -110,9 +144,15 @@ async function discoverServer(gladys, server) {
       `${nodes.map((entry) => entry.node).join(', ')} — and ${guests.length} guest(s): ` +
       guests.map((guest) => guest.key).join(', '),
   );
+  for (const [node, disks] of disksByNode) {
+    logger.info(
+      `${server.label}: ${disks.length} disk(s) on ${node}: ` +
+        disks.map((disk) => disk.devpath).join(', '),
+    );
+  }
 
   return [
-    ...nodes.map(({ node }) => buildNodeDevice(gladys, server, node)),
+    ...nodes.map(({ node }) => buildNodeDevice(gladys, server, node, disksByNode.get(node) ?? [])),
     ...guests.map((guest) => buildGuestDevice(gladys, server, guest)),
   ];
 }

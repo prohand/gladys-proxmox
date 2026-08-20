@@ -10,13 +10,8 @@
   "docker_image": "ghcr.io/prohand/gladys-proxmox:1.0.2",
   "gladys_version": ">=4.86.0",
   "cover_image": "https://raw.githubusercontent.com/prohand/gladys-proxmox/main/cover.png",
-  "categories": [
-    "network",
-    "services"
-  ],
-  "transports": [
-    "local"
-  ],
+  "categories": ["network", "services"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
@@ -388,6 +383,87 @@
         "fr": "Europe/Paris"
       },
       "required": false
+    },
+    {
+      "key": "date_format",
+      "type": "select",
+      "label": {
+        "en": "Date format",
+        "fr": "Format de date"
+      },
+      "description": {
+        "en": "How the \"Last backup\" timestamp is written. The time is always shown on a 24-hour clock, in the time zone above — which is only printed on the tile if you pick the last option.",
+        "fr": "Façon d'écrire l'horodatage « Last backup ». L'heure est toujours affichée sur 24 heures, dans le fuseau ci-dessus — qui n'est indiqué sur la tuile que si vous choisissez la dernière option."
+      },
+      "required": false,
+      "default": "day_month_year",
+      "options": [
+        {
+          "value": "day_month_year",
+          "label": {
+            "en": "16/08/2026 11:25:04 (day/month/year)",
+            "fr": "16/08/2026 11:25:04 (jour/mois/année)"
+          }
+        },
+        {
+          "value": "month_day_year",
+          "label": {
+            "en": "08/16/2026 11:25:04 (month/day/year)",
+            "fr": "08/16/2026 11:25:04 (mois/jour/année)"
+          }
+        },
+        {
+          "value": "year_month_day",
+          "label": {
+            "en": "2026-08-16 11:25:04 (ISO)",
+            "fr": "2026-08-16 11:25:04 (ISO)"
+          }
+        },
+        {
+          "value": "year_month_day_timezone",
+          "label": {
+            "en": "2026-08-16 11:25:04 (Europe/Paris) — with the time zone",
+            "fr": "2026-08-16 11:25:04 (Europe/Paris) — avec le fuseau horaire"
+          }
+        }
+      ]
+    },
+    {
+      "key": "disks_monitoring",
+      "type": "select",
+      "label": {
+        "en": "Disk monitoring (SMART)",
+        "fr": "Surveillance des disques (SMART)"
+      },
+      "description": {
+        "en": "Adds a \"SMART status\" feature to every node, and one temperature sensor per physical disk. Reading the health costs one request per node; the temperatures cost one more per disk, each running a smartctl on the Proxmox side. Needs Sys.Audit on /nodes, like the backups. Add or replace a disk? Re-run a scan so its sensor appears.",
+        "fr": "Ajoute une fonctionnalité « SMART status » à chaque nœud, et un capteur de température par disque physique. Lire la santé coûte une requête par nœud ; les températures une de plus par disque, chacune exécutant un smartctl côté Proxmox. Nécessite Sys.Audit sur /nodes, comme les sauvegardes. Disque ajouté ou remplacé ? Relancez une recherche pour voir son capteur."
+      },
+      "required": false,
+      "default": "smart_and_temperature",
+      "options": [
+        {
+          "value": "smart_and_temperature",
+          "label": {
+            "en": "SMART status and temperatures",
+            "fr": "État SMART et températures"
+          }
+        },
+        {
+          "value": "smart",
+          "label": {
+            "en": "SMART status only",
+            "fr": "État SMART uniquement"
+          }
+        },
+        {
+          "value": "off",
+          "label": {
+            "en": "Off",
+            "fr": "Désactivé"
+          }
+        }
+      ]
     },
     {
       "key": "poll_frequency",

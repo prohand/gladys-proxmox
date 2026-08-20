@@ -23,11 +23,19 @@ and node filter.
 **One Gladys device per Proxmox node** (`Proxmox <node>`), with three
 read-only features describing its last backup (`vzdump` task):
 
-| Feature             | Category / type        | Contents                                                                                                              |
-| ------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Last backup**     | `text` / `text`        | When the last backup started, in your time zone (`2026-08-19 02:00:00 (Europe/Paris)`). `unknown` when there is none. |
-| **Backup duration** | `duration` / `integer` | How long that backup ran, in seconds. `keep_history: true` → chartable, usable as a scene trigger.                    |
-| **Backup status**   | `text` / `text`        | `OK`, or `failed — <what Proxmox said>` (`failed — WARNINGS: 2`). `unknown` when there is no backup.                  |
+| Feature             | Category / type        | Contents                                                                                                                            |
+| ------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Last backup**     | `text` / `text`        | When the last backup started, in your time zone and in the configured format (`16/08/2026 11:25:04`). `unknown` when there is none. |
+| **Backup duration** | `duration` / `integer` | How long that backup ran, in seconds. `keep_history: true` → chartable, usable as a scene trigger.                                  |
+| **Backup status**   | `text` / `text`        | `OK`, or `failed — <what Proxmox said>` (`failed — WARNINGS: 2`). `unknown` when there is no backup.                                |
+
+…plus, unless _Disk monitoring_ is turned off, the state of its **physical
+disks**:
+
+| Feature                       | Category / type                  | Contents                                                                                                  |
+| ----------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **SMART status**              | `text` / `text`                  | `OK (3 disks)`, or `failed — /dev/sdb: FAILED`. `unknown` when no disk verdict could be read.             |
+| **Disk `<name>` temperature** | `temperature-sensor` / `decimal` | One sensor per disk found at discovery (`Disk sda temperature`), in °C. `keep_history: true` → chartable. |
 
 **One Gladys device per VM and LXC container**
 (`Proxmox <name> (<vmid>)`), with a single read-only feature:
@@ -46,14 +54,23 @@ as a successful backup_: with the default scope a `WARNINGS: n` run reads
 
 A node with no backup inside the observation window publishes `unknown` on
 **Last backup** and on **Backup status**, and nothing at all on the duration: a
-numeric feature cannot say "unknown", and `0 s` would be a lie. Templates are
-never turned into devices, and a guest that disappears keeps its last known
-state rather than being faked to `stopped`.
+numeric feature cannot say "unknown", and `0 s` would be a lie. The same holds
+for a drive that reports no temperature — nothing is published rather than a
+0 °C that would read like a measurement. Templates are never turned into
+devices, and a guest that disappears keeps its last known state rather than
+being faked to `stopped`.
+
+The disks are read alongside the backups, never instead of them: a node whose
+disk list cannot be read (an under-privileged token, a controller smartctl knows
+nothing about) reports `unknown` on **SMART status** and keeps publishing its
+backup features. A disk added after the last discovery gets its sensor on the
+next scan.
 
 ## Required Proxmox permissions
 
-**`Sys.Audit` on `/nodes`** (read the backup task log) and **`VM.Audit` on
-`/vms`** (see the VMs and containers). The built-in read-only role grants both:
+**`Sys.Audit` on `/nodes`** (read the backup task log, and the disks) and
+**`VM.Audit` on `/vms`** (see the VMs and containers). The built-in read-only
+role grants both:
 
 ```bash
 pveum user add gladys@pve --password "$(openssl rand -base64 24)"
@@ -120,14 +137,15 @@ dependencies** beyond the SDK.
 │  │  ├─ client.js                   #   HTTPS GET client: token auth, TLS posture, error mapping
 │  │  ├─ nodes.js                    #   node listing and the Sys.Audit privilege probe
 │  │  ├─ backups.js                  #   last backup of a node, and what "successful" means
-│  │  └─ guests.js                   #   VM/LXC listing, with its short-lived snapshot cache
+│  │  ├─ guests.js                   #   VM/LXC listing, with its short-lived snapshot cache
+│  │  └─ disks.js                    #   physical disks: SMART verdict and temperature
 │  ├─ devices/
 │  │  ├─ index.js                    #   registry: one device per node, one per guest
-│  │  ├─ proxmoxNode.js              #   the node device: its three backup features, and its poll
+│  │  ├─ proxmoxNode.js              #   the node device: its backup and disk features, and its poll
 │  │  └─ proxmoxGuest.js             #   the guest device: its status feature, and its poll
 │  ├─ actions.js                     # the Configuration screen buttons
 │  ├─ poll.js                        # the frequencies Gladys accepts, and the real interval
-│  ├─ format.js                      # timestamps in the user's time zone, durations, summaries
+│  ├─ format.js                      # timestamps in the user's zone and format, durations, summaries
 │  ├─ servers.js                     # the flat form -> the list of Proxmox servers, and id scoping
 │  └─ config.js                      # config defaults, normalization, bounds
 ├─ docs/
@@ -156,12 +174,14 @@ Per server — the same keys again with a `_2` suffix for the second one
 
 Shared by every configured server:
 
-| Key                    | Type   | Default   | Purpose                                                   |
-| ---------------------- | ------ | --------- | --------------------------------------------------------- |
-| `backup_lookback_days` | number | `7`       | How far back the last backup is looked for                |
-| `backup_success_scope` | select | `ok_only` | Whether `WARNINGS: n` still counts as a successful backup |
-| `timezone`             | string | host      | IANA zone for the rendered timestamp                      |
-| `poll_frequency`       | number | `300`     | Refresh interval, seconds (60-3600)                       |
+| Key                    | Type   | Default                 | Purpose                                                                                                                     |
+| ---------------------- | ------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `backup_lookback_days` | number | `7`                     | How far back the last backup is looked for                                                                                  |
+| `backup_success_scope` | select | `ok_only`               | Whether `WARNINGS: n` still counts as a successful backup                                                                   |
+| `timezone`             | string | host                    | IANA zone for the rendered timestamp                                                                                        |
+| `date_format`          | select | `day_month_year`        | How that timestamp is written (`16/08/2026 11:25:04`, `08/16/2026 …`, `2026-08-16 …`, or the ISO form followed by the zone) |
+| `disks_monitoring`     | select | `smart_and_temperature` | SMART status and temperatures, SMART status only, or off                                                                    |
+| `poll_frequency`       | number | `300`                   | Refresh interval, seconds (60-3600)                                                                                         |
 
 Gladys only accepts six device poll frequencies, the slowest being one minute,
 so the devices declare that one and `src/poll.js` enforces the configured

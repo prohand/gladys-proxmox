@@ -8,7 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { DEFAULT_CONFIG } from '../src/config.js';
+import { DEFAULT_CONFIG, DISKS_MONITORING_VALUES } from '../src/config.js';
+import { DATE_FORMAT_VALUES } from '../src/format.js';
 import { SERVER_IDS, serverConfigKeys } from '../src/servers.js';
 
 const manifest = JSON.parse(
@@ -47,6 +48,30 @@ test('every value-carrying config field is known to DEFAULT_CONFIG', () => {
       field.key in DEFAULT_CONFIG,
       `config field "${field.key}" has no entry in DEFAULT_CONFIG`,
     );
+  }
+});
+
+test('every select offers exactly the values the code accepts', () => {
+  // A value the form can produce but `normalizeConfig()` silently rewrites is
+  // a setting that does nothing: the two lists have to be the same list.
+  const accepted = {
+    backup_success_scope: ['ok_only', 'ok_and_warnings'],
+    date_format: DATE_FORMAT_VALUES,
+    disks_monitoring: DISKS_MONITORING_VALUES,
+  };
+  const selects = manifest.config_schema.filter((field) => field.type === 'select');
+  assert.deepEqual(
+    selects.map((field) => field.key).sort(),
+    Object.keys(accepted).sort(),
+    'a new select must declare which values the code accepts',
+  );
+  for (const field of selects) {
+    const values = field.options.map((option) => option.value);
+    assert.deepEqual([...values].sort(), [...accepted[field.key]].sort());
+    assert.ok(values.includes(field.default), `the default of "${field.key}" must be an option`);
+    for (const option of field.options) {
+      assert.ok(option.label?.en && option.label?.fr, 'every option stays bilingual');
+    }
   }
 });
 

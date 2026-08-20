@@ -16,9 +16,42 @@
 // `src/servers.js`'s job.
 // -----------------------------------------------------------------------------
 
+import { DEFAULT_DATE_FORMAT, resolveDateFormat } from './format.js';
+
 // Suffix carried by each server's fields, in server-id order (the first server
 // carries none: its keys are the ones that existed before there was a second).
 export const SERVER_FIELD_SUFFIXES = ['', '_2'];
+
+// How much of the physical disks of a node is read, and what it costs:
+//   - `off`                  : nothing at all, no extra request;
+//   - `smart`                : the health verdict of every disk — ONE request
+//                              per node (`/nodes/{node}/disks/list`);
+//   - `smart_and_temperature`: the same, plus the temperature of each disk —
+//                              one more request per DISK, each of which runs a
+//                              `smartctl` on the Proxmox side.
+export const DISKS_MONITORING = {
+  OFF: 'off',
+  SMART: 'smart',
+  SMART_AND_TEMPERATURE: 'smart_and_temperature',
+};
+
+// Every accepted value, in the order the manifest lists them.
+export const DISKS_MONITORING_VALUES = Object.values(DISKS_MONITORING);
+
+// The default: what the user asked the integration for — the health of the
+// disks and how hot they run. The extra reads happen at the configured refresh
+// interval, which is five minutes by default.
+export const DEFAULT_DISKS_MONITORING = DISKS_MONITORING.SMART_AND_TEMPERATURE;
+
+/**
+ * Keep a configured disk-monitoring mode, or fall back to the default.
+ * @param {unknown} value - The configured value.
+ * @returns {string} One of `DISKS_MONITORING_VALUES`.
+ */
+export function resolveDisksMonitoring(value) {
+  const candidate = String(value ?? '').trim();
+  return DISKS_MONITORING_VALUES.includes(candidate) ? candidate : DEFAULT_DISKS_MONITORING;
+}
 
 // The per-server fields, with their default value.
 const SERVER_DEFAULTS = {
@@ -38,6 +71,8 @@ const SHARED_DEFAULTS = {
   backup_lookback_days: 7,
   backup_success_scope: 'ok_only', // 'ok_only' | 'ok_and_warnings'
   timezone: '',
+  date_format: DEFAULT_DATE_FORMAT,
+  disks_monitoring: DEFAULT_DISKS_MONITORING, // 'off' | 'smart' | 'smart_and_temperature'
   poll_frequency: 300,
 };
 
@@ -201,6 +236,8 @@ export function normalizeConfig(raw = {}) {
     backup_success_scope:
       raw.backup_success_scope === 'ok_and_warnings' ? 'ok_and_warnings' : 'ok_only',
     timezone: normalizeString(raw, 'timezone'),
+    date_format: resolveDateFormat(raw.date_format),
+    disks_monitoring: resolveDisksMonitoring(raw.disks_monitoring),
     poll_frequency: normalizeNumber(raw.poll_frequency, 'poll_frequency'),
   };
 }
