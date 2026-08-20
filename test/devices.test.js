@@ -17,7 +17,7 @@ import {
 import { describeDevice } from '../src/devices/index.js';
 import { GLADYS_POLL_FREQUENCIES } from '../src/poll.js';
 
-const CONFIG = normalizeConfig({
+const RAW_CONFIG = {
   host: 'pve.lan',
   token_id: 'a@pve!b',
   token_secret: 's',
@@ -26,7 +26,8 @@ const CONFIG = normalizeConfig({
   token_secret_2: 's2',
   backup_lookback_days: 12,
   poll_frequency: 600,
-});
+};
+const CONFIG = normalizeConfig(RAW_CONFIG);
 const [server, secondServer] = listServers(CONFIG);
 
 const GUEST = {
@@ -39,7 +40,7 @@ const GUEST = {
   running: true,
 };
 
-test('a node device carries the three read-only backup features', () => {
+test('a node device carries the read-only backup and SMART features', () => {
   const gladys = createFakeGladys();
   const device = buildNodeDevice(gladys, server, 'pve1');
 
@@ -49,9 +50,11 @@ test('a node device carries the three read-only backup features', () => {
   // in milliseconds, and rejects the whole publish otherwise.
   assert.equal(device.poll_frequency, 60000);
   assert.ok(GLADYS_POLL_FREQUENCIES.includes(device.poll_frequency));
-  assert.equal(device.features.length, 3);
+  // The three backup features, plus the SMART status — no disk was discovered
+  // here, so there is no temperature feature to go with it.
+  assert.equal(device.features.length, 4);
 
-  const [lastBackup, duration, status] = device.features;
+  const [lastBackup, duration, status, smart] = device.features;
 
   assert.equal(lastBackup.name, 'Last backup');
   assert.equal(lastBackup.external_id, `ext:proxmox:proxmox-node:pve1:${FEATURE.LAST_BACKUP}`);
@@ -77,6 +80,53 @@ test('a node device carries the three read-only backup features', () => {
   assert.equal(status.type, DEVICE_FEATURE_TYPES.TEXT.TEXT);
   assert.equal(status.keep_history, false);
   assert.equal(status.read_only, true);
+
+  // Same reasoning for the disks: "failed — /dev/sdb: FAILED" is the
+  // actionable answer, and no binary feature can hold it.
+  assert.equal(smart.name, 'SMART status');
+  assert.equal(smart.external_id, `ext:proxmox:proxmox-node:pve1:${FEATURE.SMART_STATUS}`);
+  assert.equal(smart.category, DEVICE_FEATURE_CATEGORIES.TEXT);
+  assert.equal(smart.type, DEVICE_FEATURE_TYPES.TEXT.TEXT);
+  assert.equal(smart.read_only, true);
+});
+
+test('a discovered disk becomes a temperature sensor of its node', () => {
+  const gladys = createFakeGladys();
+  const device = buildNodeDevice(gladys, server, 'pve1', [
+    { devpath: '/dev/sda', id: 'sda' },
+    { devpath: '/dev/nvme0n1', id: 'nvme0n1' },
+  ]);
+
+  const temperatures = device.features.slice(4);
+  assert.deepEqual(
+    temperatures.map((feature) => feature.name),
+    ['Disk sda temperature', 'Disk nvme0n1 temperature'],
+  );
+  assert.deepEqual(
+    temperatures.map((feature) => feature.external_id),
+    [
+      'ext:proxmox:proxmox-node:pve1:disk-temperature-sda',
+      'ext:proxmox:proxmox-node:pve1:disk-temperature-nvme0n1',
+    ],
+  );
+  for (const feature of temperatures) {
+    assert.equal(feature.category, DEVICE_FEATURE_CATEGORIES.TEMPERATURE_SENSOR);
+    assert.equal(feature.type, DEVICE_FEATURE_TYPES.SENSOR.DECIMAL);
+    assert.equal(feature.unit, DEVICE_FEATURE_UNITS.CELSIUS);
+    assert.equal(feature.read_only, true);
+    assert.equal(feature.keep_history, true);
+  }
+});
+
+test('a node device declares no disk feature when disk monitoring is off', () => {
+  const gladys = createFakeGladys();
+  const [plain] = listServers(normalizeConfig({ ...RAW_CONFIG, disks_monitoring: 'off' }));
+  const device = buildNodeDevice(gladys, plain, 'pve1', [{ devpath: '/dev/sda', id: 'sda' }]);
+
+  assert.deepEqual(
+    device.features.map((feature) => feature.name),
+    ['Last backup', 'Backup duration', 'Backup status'],
+  );
 });
 
 test('every feature declares the min and max Gladys stores as NOT NULL', () => {
@@ -85,7 +135,7 @@ test('every feature declares the min and max Gladys stores as NOT NULL', () => {
   // feature that omits them, and — like an invalid poll frequency — ONE refused
   // feature rejects the whole publish, so not a single device is registered.
   const features = [
-    ...buildNodeDevice(gladys, server, 'pve1').features,
+    ...buildNodeDevice(gladys, server, 'pve1', [{ devpath: '/dev/sda', id: 'sda' }]).features,
     ...buildGuestDevice(gladys, server, GUEST).features,
   ];
   assert.ok(features.length > 0);

@@ -1,8 +1,9 @@
 # Proxmox
 
 Monitor the **backups** of your Proxmox VE nodes from Gladys — when the last one
-ran, how long it took and whether it succeeded — plus the **running state of
-every virtual machine and LXC container**.
+ran, how long it took and whether it succeeded — the **SMART health and
+temperature of their disks**, plus the **running state of every virtual machine
+and LXC container**.
 
 This integration is **strictly read-only**. It performs `GET` requests on the
 Proxmox VE API and nothing else — it never starts, stops, migrates, deletes or
@@ -14,11 +15,19 @@ After installation, one Gladys device appears per Proxmox node, named
 `Proxmox <node>`, carrying three read-only features about its **last backup**
 (a Proxmox `vzdump` task):
 
-| Feature             | Type           | What it holds                                                                                                                             |
-| ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Last backup**     | Text           | When the last backup started, in your time zone — e.g. `2026-08-19 02:00:00 (Europe/Paris)`. Holds `unknown` when the node has no backup. |
-| **Backup duration** | Integer sensor | How long that backup ran, in seconds. Kept in history, so you can chart it and trigger scenes on it.                                      |
-| **Backup status**   | Text           | `OK`, or `failed — ` followed by what Proxmox said — e.g. `failed — command 'lvcreate' failed: exit code 5`.                              |
+| Feature             | Type           | What it holds                                                                                                                                               |
+| ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Last backup**     | Text           | When the last backup started, in your time zone and in the date format you chose — e.g. `16/08/2026 11:25:04`. Holds `unknown` when the node has no backup. |
+| **Backup duration** | Integer sensor | How long that backup ran, in seconds. Kept in history, so you can chart it and trigger scenes on it.                                                        |
+| **Backup status**   | Text           | `OK`, or `failed — ` followed by what Proxmox said — e.g. `failed — command 'lvcreate' failed: exit code 5`.                                                |
+
+Unless you turn _Disk monitoring_ off, the same device also carries the state of
+the **physical disks** of that node:
+
+| Feature                       | Type               | What it holds                                                                                                                         |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **SMART status**              | Text               | `OK (3 disks)` when every disk passes, `failed — /dev/sdb: FAILED` when one does not, `unknown` when no verdict was readable.         |
+| **Disk `<name>` temperature** | Temperature sensor | One sensor per disk found when the node was discovered — `Disk sda temperature`, `Disk nvme0n1 temperature` — in °C, kept in history. |
 
 And one Gladys device per virtual machine and per LXC container, named
 `Proxmox <name> (<vmid>)`:
@@ -41,7 +50,9 @@ run publishes `OK`.
 
 A node with no backup inside the observation window publishes `unknown` on
 **Last backup** and on **Backup status**, and leaves **Backup duration** unknown
-rather than showing a `0 s` backup that never happened. Templates never become
+rather than showing a `0 s` backup that never happened. A drive that reports no
+temperature is left the same way — no `0 °C` that would read like a
+measurement. Templates never become
 devices, and a guest that disappears (deleted, or no longer visible to the
 token) keeps its last known state instead of being shown as stopped.
 
@@ -91,10 +102,10 @@ If you only have one Proxmox, leave the second block empty and nothing changes.
 This is the part worth getting right. The integration needs **two audit (read)
 privileges**, and nothing else:
 
-| Privilege     | On path           | Why                                                       |
-| ------------- | ----------------- | --------------------------------------------------------- |
-| **Sys.Audit** | `/nodes` (or `/`) | Read the task log of the nodes, and read their status.    |
-| **VM.Audit**  | `/vms` (or `/`)   | See the virtual machines and containers, and their state. |
+| Privilege     | On path           | Why                                                           |
+| ------------- | ----------------- | ------------------------------------------------------------- |
+| **Sys.Audit** | `/nodes` (or `/`) | Read the task log of the nodes, their status and their disks. |
+| **VM.Audit**  | `/vms` (or `/`)   | See the virtual machines and containers, and their state.     |
 
 Nothing else. No `Datastore.*`, no `Sys.Modify`, no `VM.PowerMgmt`, no
 `Sys.Console`, no root access, no shell access.
@@ -106,6 +117,8 @@ Nothing else. No `Datastore.*`, no `Sys.Modify`, no `VM.PowerMgmt`, no
 | `/api2/json/nodes`                     | GET    | none (any authenticated token)    |
 | `/api2/json/nodes/{node}/tasks`        | GET    | `Sys.Audit` on `/nodes/{node}` \* |
 | `/api2/json/nodes/{node}/status`       | GET    | `Sys.Audit` on `/nodes/{node}`    |
+| `/api2/json/nodes/{node}/disks/list`   | GET    | `Sys.Audit` on `/nodes/{node}` †  |
+| `/api2/json/nodes/{node}/disks/smart`  | GET    | `Sys.Audit` on `/nodes/{node}` †  |
 | `/api2/json/cluster/resources?type=vm` | GET    | `VM.Audit` on `/vms/{vmid}` \*    |
 
 \* **Important subtlety.** Both lists are _permission-filtered_, not
@@ -117,6 +130,10 @@ broken: the backup features simply stay `unknown` forever, and no VM appears.
 That is why the **Test the connection** button probes `/nodes/{node}/status`
 (which _does_ return `403`) and tells you exactly which nodes are missing the
 privilege, and how many guests the token can actually see.
+
+† Only called when _Disk monitoring_ is on. Those two, unlike the lists above,
+_are_ refused with a `403`: a token without `Sys.Audit` gets `unknown` on the
+SMART status, and **Test the connection** names the nodes it could not read.
 
 ### Option A — the built-in `PVEAuditor` role (simplest)
 
@@ -209,22 +226,24 @@ curl -sS --insecure \
 ## Configuration
 
 The first six fields below exist **twice**: once for the first Proxmox, once
-for the optional second one. The last four are shared by both.
+for the optional second one. The last six are shared by both.
 
-| Field                                  | Required | Default | Notes                                                                                                   |
-| -------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| **Name of this Proxmox**               | no       | Proxmox | Prefixes the name of every device of that server. Second block defaults to `Proxmox 2`.                 |
-| **Proxmox host**                       | yes      | —       | IP or hostname of any node — one node answers for the whole cluster. A pasted URL works too, see below. |
-| **API port**                           | no       | `8006`  | The Proxmox VE API port.                                                                                |
-| **API token ID**                       | yes      | —       | The full `user@realm!tokenname` form, e.g. `gladys@pve!tasks`.                                          |
-| **API token secret**                   | yes      | —       | The value Proxmox shows once. Stored encrypted by Gladys, never sent back to your browser.              |
-| **TLS certificate fingerprint**        | no       | empty   | SHA-256 fingerprint of the node certificate. See below.                                                 |
-| **Verify the TLS certificate**         | no       | on      | Leave on. See below.                                                                                    |
-| **Nodes to monitor**                   | no       | all     | Comma-separated node names, e.g. `pve1, pve2`. Also scopes the VMs/LXC reported.                        |
-| **How far back to look for a backup**  | no       | `7` d   | The last backup is searched inside this window.                                                         |
-| **What counts as a successful backup** | no       | OK only | Whether a backup that ended with `WARNINGS: n` still counts as successful.                              |
-| **Time zone**                          | no       | host    | IANA zone used to render the timestamp, e.g. `Europe/Paris`.                                            |
-| **Refresh interval**                   | no       | `300` s | How often Proxmox is read, between 60 s and one hour.                                                   |
+| Field                                  | Required | Default                       | Notes                                                                                                   |
+| -------------------------------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Name of this Proxmox**               | no       | Proxmox                       | Prefixes the name of every device of that server. Second block defaults to `Proxmox 2`.                 |
+| **Proxmox host**                       | yes      | —                             | IP or hostname of any node — one node answers for the whole cluster. A pasted URL works too, see below. |
+| **API port**                           | no       | `8006`                        | The Proxmox VE API port.                                                                                |
+| **API token ID**                       | yes      | —                             | The full `user@realm!tokenname` form, e.g. `gladys@pve!tasks`.                                          |
+| **API token secret**                   | yes      | —                             | The value Proxmox shows once. Stored encrypted by Gladys, never sent back to your browser.              |
+| **TLS certificate fingerprint**        | no       | empty                         | SHA-256 fingerprint of the node certificate. See below.                                                 |
+| **Verify the TLS certificate**         | no       | on                            | Leave on. See below.                                                                                    |
+| **Nodes to monitor**                   | no       | all                           | Comma-separated node names, e.g. `pve1, pve2`. Also scopes the VMs/LXC reported.                        |
+| **How far back to look for a backup**  | no       | `7` d                         | The last backup is searched inside this window.                                                         |
+| **What counts as a successful backup** | no       | OK only                       | Whether a backup that ended with `WARNINGS: n` still counts as successful.                              |
+| **Time zone**                          | no       | host                          | IANA zone used to render the timestamp, e.g. `Europe/Paris`.                                            |
+| **Date format**                        | no       | `16/08/2026 11:25:04`         | How that timestamp is written: day-first, month-first, ISO, or ISO followed by the time zone.           |
+| **Disk monitoring (SMART)**            | no       | SMART status and temperatures | What is read from the physical disks — see below.                                                       |
+| **Refresh interval**                   | no       | `300` s                       | How often Proxmox is read, between 60 s and one hour.                                                   |
 
 _Proxmox host_ takes a host name or an IP address, but the address you have in
 front of you is the one in your browser — so a pasted URL is accepted as well:
@@ -234,8 +253,37 @@ the address wins over the _API port_ field.
 
 Only the first server's host and token are mandatory: the whole second block is
 optional. _How far back to look for a backup_, _What counts as a successful
-backup_, _Time zone_ and _Refresh interval_ are configured once and apply to
-every server.
+backup_, _Time zone_, _Date format_, _Disk monitoring_ and _Refresh interval_
+are configured once and apply to every server.
+
+The time is always shown on a 24-hour clock, and the time zone is not repeated
+on the tile — you know the one you live in. Pick the last _Date format_ option
+if you do want it printed, for instance when the Proxmox and the person reading
+the dashboard are not in the same country.
+
+### Disk monitoring
+
+_Disk monitoring_ has three settings:
+
+- **SMART status and temperatures** (default) — the health verdict of every
+  disk, and one temperature sensor per disk. Reading the verdicts is one
+  request per node; the temperatures cost one more request per disk, each of
+  which runs a `smartctl` on the Proxmox side.
+- **SMART status only** — the verdicts, and nothing else. One request per node,
+  no `smartctl` per drive.
+- **Off** — the disks are never read, and the node devices carry their backup
+  features only.
+
+Both reads need `Sys.Audit` on `/nodes`, exactly like the backups — _Test the
+connection_ tells you how many disks the token can read, and names the nodes
+where it cannot. A disk with no SMART verdict (a controller `smartctl` knows
+nothing about, a USB enclosure) is counted apart rather than reported as
+failing, and a node whose disk list cannot be read at all reports `unknown`
+without ever costing that node its backup features.
+
+The temperature sensors are created when the node is discovered. Add or replace
+a disk, and it gets its own sensor at the next scan (Discovery tab, or a
+configuration save).
 
 Gladys itself cannot ask for a refresh less often than once a minute, so the
 integration holds the extra wait: it is called every minute and reads Proxmox
@@ -297,10 +345,11 @@ still running is not the last backup yet.
 ## Actions
 
 - **Test the connection** — checks that the host answers, that the API token is
-  accepted, that it can actually read the task log of every monitored node, and
-  how many VMs/LXC it can see. Run this first whenever something looks wrong.
-- **Refresh now** — reads the backups and the VM/LXC states immediately, instead
-  of waiting for the next refresh.
+  accepted, that it can actually read the task log of every monitored node, how
+  many VMs/LXC it can see and how many disks it can read the SMART data of. Run
+  this first whenever something looks wrong.
+- **Refresh now** — reads the backups, the disks and the VM/LXC states
+  immediately, instead of waiting for the next refresh.
 
 Both run on every configured server, and prefix each result with `[<name>]` when
 there are two — so a message like `[Office] Proxmox refused the API token (401)`
@@ -366,6 +415,19 @@ frozen on their last known value, until you delete them in Gladys.
 **Timestamps are off by a few hours** — set the _Time zone_ field to your IANA
 zone (`Europe/Paris`, `America/New_York`…). Left empty, the integration uses the
 time zone of the machine Gladys runs on, which is often UTC inside a container.
+_Date format_ decides how that date is written, and whether the zone is printed
+next to it.
+
+**"SMART status" stays `unknown`** — the token cannot read
+`/nodes/{node}/disks/list` (run **Test the connection**: it names the nodes),
+or `smartctl` has no verdict for those drives — a RAID controller hiding its
+members, a USB enclosure. Disks behind a hardware RAID controller are not
+visible to Proxmox at all.
+
+**A disk has no temperature sensor** — it was added after the node was
+discovered: run a new scan from the Discovery tab, or save the configuration.
+A drive that reports no temperature at all (some SAS and USB drives) publishes
+nothing rather than a fake `0 °C`.
 
 The integration logs everything it does: check the integration logs from the
 Gladys UI (or `docker logs` on the host), with `LOG_LEVEL=debug` for the full

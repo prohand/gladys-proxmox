@@ -48,7 +48,14 @@ const SERVER_KEYS = [
 
 // Fields configured once and applied to every server: they describe what is
 // read and how it is rendered, not who is being read.
-const SHARED_KEYS = ['backup_lookback_days', 'backup_success_scope', 'timezone', 'poll_frequency'];
+const SHARED_KEYS = [
+  'backup_lookback_days',
+  'backup_success_scope',
+  'timezone',
+  'date_format',
+  'disks_monitoring',
+  'poll_frequency',
+];
 
 /**
  * The suffix the fields of one server carry in the flat configuration.
