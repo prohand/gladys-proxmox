@@ -396,8 +396,13 @@ this integration can.
   `guests_running`, `guests_not_running` and `errors` (counts), to test in a
   condition.
 - **Get the last Proxmox backup** — for one node: `has_backup`, `success`,
-  `status`, `last_backup`, `duration_seconds`, `smart_status`. Handy for a
-  morning summary message.
+  `status`, `last_backup`, `duration_seconds`. Handy for a morning summary
+  message.
+- **Get the SMART status of a Proxmox node** — for one node: `status`
+  (`OK (3 disks)`, `failed — /dev/sdb: FAILED`…), `disk_count`, `failed_disks`,
+  `unknown_disks` and `max_temperature` (°C, only when a temperature was read).
+  Needs disk monitoring on: when it is off, the action fails with a message
+  saying so.
 - **Get a Proxmox VM/LXC state** — for one VM/LXC: `status`, `running`, `name`,
   `node`.
 

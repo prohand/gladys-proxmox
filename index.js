@@ -22,7 +22,7 @@ import { hasConfiguredServer, listServers } from './src/servers.js';
 import { discoverDevices, pollDevice } from './src/devices/index.js';
 import { describeError, describeFailures, refreshNow, testConnection } from './src/actions.js';
 import { SCENE_ACTION, WIDGET } from './src/capabilities.js';
-import { getBackupStatus, getGuestStatus, refreshForScene } from './src/scenes.js';
+import { getBackupStatus, getGuestStatus, getSmartStatus, refreshForScene } from './src/scenes.js';
 import { backupsWidget, guestsWidget, nodeWidget, widgetAction } from './src/widgets.js';
 
 const gladys = new GladysIntegration();
@@ -78,6 +78,9 @@ gladys.onAction('refresh_now', () => refreshNow(gladys, config));
 gladys.onSceneAction(SCENE_ACTION.REFRESH, () => refreshForScene(gladys, config));
 gladys.onSceneAction(SCENE_ACTION.GET_BACKUP_STATUS, (fields) =>
   getBackupStatus(gladys, config, fields),
+);
+gladys.onSceneAction(SCENE_ACTION.GET_SMART_STATUS, (fields) =>
+  getSmartStatus(gladys, config, fields),
 );
 gladys.onSceneAction(SCENE_ACTION.GET_GUEST_STATUS, (fields) =>
   getGuestStatus(gladys, config, fields),

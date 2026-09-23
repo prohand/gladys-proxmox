@@ -1036,13 +1036,83 @@
             "en": "Duration (s)",
             "fr": "Durée (s)"
           }
+        }
+      ]
+    },
+    {
+      "key": "get_smart_status",
+      "label": {
+        "en": "Get the SMART status of a Proxmox node",
+        "fr": "Lire l'état SMART d'un nœud Proxmox"
+      },
+      "description": {
+        "en": "The health of the disks of one node, for the next actions of the scene.",
+        "fr": "La santé des disques d'un nœud, pour les actions suivantes de la scène."
+      },
+      "timeout_seconds": 60,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Proxmox node",
+            "fr": "Nœud Proxmox"
+          },
+          "description": {
+            "en": "The node to read.",
+            "fr": "Le nœud à lire."
+          },
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "node",
+          "type": "string",
+          "label": {
+            "en": "Node",
+            "fr": "Nœud"
+          }
         },
         {
-          "key": "smart_status",
+          "key": "status",
           "type": "string",
           "label": {
             "en": "SMART status",
             "fr": "État SMART"
+          }
+        },
+        {
+          "key": "disk_count",
+          "type": "number",
+          "label": {
+            "en": "Disks read",
+            "fr": "Disques lus"
+          }
+        },
+        {
+          "key": "failed_disks",
+          "type": "number",
+          "label": {
+            "en": "Failed disks",
+            "fr": "Disques en échec"
+          }
+        },
+        {
+          "key": "unknown_disks",
+          "type": "number",
+          "label": {
+            "en": "Disks with no verdict",
+            "fr": "Disques sans verdict"
+          }
+        },
+        {
+          "key": "max_temperature",
+          "type": "number",
+          "label": {
+            "en": "Hottest disk (°C)",
+            "fr": "Disque le plus chaud (°C)"
           }
         }
       ]

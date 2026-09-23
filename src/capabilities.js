@@ -32,6 +32,7 @@ export const SCENE_TRIGGER = {
 export const SCENE_ACTION = {
   REFRESH: 'refresh',
   GET_BACKUP_STATUS: 'get_backup_status',
+  GET_SMART_STATUS: 'get_smart_status',
   GET_GUEST_STATUS: 'get_guest_status',
 };
 

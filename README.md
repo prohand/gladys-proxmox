@@ -80,8 +80,9 @@ Since 5.1 the manifest also declares, and the code serves:
   by VM/LXC and new state) and `disk_failed` (SMART verdict turned failed). A
   state already true at startup is a baseline, not an event, so a restart never
   re-fires.
-- **3 scene actions**, all read-only — `refresh` (with counts as outputs),
-  `get_backup_status` and `get_guest_status`.
+- **4 scene actions**, all read-only — `refresh` (with counts as outputs),
+  `get_backup_status`, `get_smart_status` (the disks of a node, kept apart from
+  the backups) and `get_guest_status`.
 
 Keys live in `src/capabilities.js` and are **forever**: dashboards and scenes
 store them. Declaring them requires `gladys_version >= 5.1.0`.

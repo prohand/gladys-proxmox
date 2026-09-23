@@ -21,7 +21,7 @@ import { resetSkipSmartSupport } from '../src/proxmox/disks.js';
 import { resetPollThrottle } from '../src/poll.js';
 import { resetObservations } from '../src/observe.js';
 import { backupsWidget, clip, guestsWidget, nodeWidget, widgetAction } from '../src/widgets.js';
-import { getBackupStatus, getGuestStatus, refreshForScene } from '../src/scenes.js';
+import { getBackupStatus, getGuestStatus, getSmartStatus, refreshForScene } from '../src/scenes.js';
 
 const manifest = JSON.parse(
   await readFile(new URL('../gladys-assistant-integration.json', import.meta.url), 'utf8'),
@@ -370,12 +370,11 @@ test('get_backup_status hands the scene the last backup of a node', async () => 
     assert.equal(failed.success, false);
     assert.equal(failed.status, 'failed — no space left on device');
     assert.equal(failed.duration_seconds, 248);
-    assert.equal(failed.smart_status, 'unknown');
 
     const ok = await getBackupStatus(gladys, config, { device: NODE_1 });
     assert.deepEqual(Object.keys(ok).sort(), declaredOutputs('get_backup_status').sort());
     assert.equal(ok.success, true);
-    assert.equal(ok.smart_status, 'OK (2 disks)');
+    assert.equal('smart_status' in ok, false, 'the disks have their own action');
 
     const none = await getBackupStatus(gladys, config, {
       device: 'ext:proxmox:proxmox-node:pve3',
@@ -384,6 +383,42 @@ test('get_backup_status hands the scene the last backup of a node', async () => 
     assert.equal(none.status, 'unknown');
     assert.equal('duration_seconds' in none, false, 'no duration rather than a fake 0');
   });
+});
+
+test('get_smart_status hands the scene the disks of a node', async () => {
+  await withCluster(async ({ gladys, config }) => {
+    const outputs = await getSmartStatus(gladys, config, { device: NODE_1 });
+    assertDeclared('get_smart_status', outputs);
+    assert.deepEqual(outputs, {
+      node: 'pve1',
+      status: 'OK (2 disks)',
+      disk_count: 2,
+      failed_disks: 0,
+      unknown_disks: 0,
+      max_temperature: 55,
+    });
+
+    // A node whose disk list is empty: no verdict, and no temperature at all
+    // rather than a 0 °C.
+    const empty = await getSmartStatus(gladys, config, { device: NODE_2 });
+    assert.equal(empty.status, 'unknown');
+    assert.equal(empty.disk_count, 0);
+    assert.equal('max_temperature' in empty, false);
+
+    await assert.rejects(getSmartStatus(gladys, config, { device: GUEST_101 }), /is a VM\/LXC/);
+  });
+});
+
+test('get_smart_status says when disk monitoring is off', async () => {
+  await withCluster(
+    async ({ gladys, config }) => {
+      await assert.rejects(
+        getSmartStatus(gladys, config, { device: NODE_1 }),
+        /Disk monitoring is off/,
+      );
+    },
+    { disks_monitoring: 'off' },
+  );
 });
 
 test('a scene action refuses a device of the wrong kind', async () => {

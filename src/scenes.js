@@ -1,13 +1,15 @@
 // -----------------------------------------------------------------------------
 // Scene actions: what a Gladys scene can ask this integration for.
 //
-// All three READ — this integration is read-only by construction, a scene can
+// All four READ — this integration is read-only by construction, a scene can
 // no more start a VM than the Configuration screen can:
 //   - `refresh`           : read every Proxmox now, publish the states, and
 //                           hand the scene a few counts to test (backups
 //                           failed, guests running...);
 //   - `get_backup_status` : the last backup of ONE node, as values the next
 //                           actions of the scene can use (send a message...);
+//   - `get_smart_status`  : the SMART verdict and the disks of ONE node — its
+//                           own action, so the backup one stays about backups;
 //   - `get_guest_status`  : the state of ONE VM/LXC, the same way.
 //
 // The node or the guest is picked in the scene editor among this integration's
@@ -69,7 +71,7 @@ function resolveDevice(gladys, config, externalId, kind) {
  */
 export async function getBackupStatus(gladys, config, fields) {
   const { server, descriptor } = resolveDevice(gladys, config, fields?.device, 'node');
-  const { backup, disks } = await readNode(gladys, server, descriptor.node);
+  const { backup } = await readNode(gladys, server, descriptor.node);
   const outputs = {
     node: descriptor.node,
     has_backup: backup !== null,
@@ -80,8 +82,39 @@ export async function getBackupStatus(gladys, config, fields) {
   if (backup && backup.duration !== null) {
     outputs.duration_seconds = backup.duration;
   }
-  if (disks) {
-    outputs.smart_status = formatSmartStatus(disks);
+  return outputs;
+}
+
+/**
+ * `get_smart_status`: the SMART verdict of the disks of one node.
+ *
+ * A disk with no verdict is counted apart (`unknown_disks`), never as failed —
+ * same rule as the "SMART status" feature.
+ * @param {object} gladys - The SDK instance.
+ * @param {object} config - Normalized configuration.
+ * @param {{device: string}} fields - The resolved fields of the action.
+ * @returns {Promise<object>} The declared outputs.
+ */
+export async function getSmartStatus(gladys, config, fields) {
+  const { server, descriptor } = resolveDevice(gladys, config, fields?.device, 'node');
+  const { disks } = await readNode(gladys, server, descriptor.node);
+  if (!disks) {
+    throw new Error('Disk monitoring is off in the settings of the Proxmox integration.');
+  }
+  const outputs = {
+    node: descriptor.node,
+    status: formatSmartStatus(disks),
+    disk_count: disks.length,
+    failed_disks: disks.filter((disk) => disk.healthy === false).length,
+    unknown_disks: disks.filter((disk) => disk.healthy === null).length,
+  };
+  const temperatures = disks
+    .map((disk) => disk.temperature)
+    .filter((temperature) => Number.isFinite(temperature));
+  // No temperature read (SMART only, or drives that report none): no output,
+  // rather than a 0 °C that would read like a measurement.
+  if (temperatures.length > 0) {
+    outputs.max_temperature = Math.max(...temperatures);
   }
   return outputs;
 }

@@ -412,8 +412,13 @@ le reste de cette intégration.
   `guests_running`, `guests_not_running` et `errors` (des nombres), à tester
   dans une condition.
 - **Lire la dernière sauvegarde Proxmox** — pour un nœud : `has_backup`,
-  `success`, `status`, `last_backup`, `duration_seconds`, `smart_status`.
-  Pratique pour un message de résumé le matin.
+  `success`, `status`, `last_backup`, `duration_seconds`. Pratique pour un
+  message de résumé le matin.
+- **Lire l'état SMART d'un nœud Proxmox** — pour un nœud : `status`
+  (`OK (3 disks)`, `failed — /dev/sdb: FAILED`…), `disk_count`, `failed_disks`,
+  `unknown_disks` et `max_temperature` (°C, seulement si une température a été
+  lue). La surveillance des disques doit être active : sinon l'action échoue
+  avec un message qui le dit.
 - **Lire l'état d'une VM/LXC Proxmox** — pour une VM/LXC : `status`, `running`,
   `name`, `node`.
 
