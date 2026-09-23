@@ -8,15 +8,10 @@
   },
   "version": "1.0.3",
   "docker_image": "ghcr.io/prohand/gladys-proxmox:1.0.3",
-  "gladys_version": ">=4.86.0",
+  "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/prohand/gladys-proxmox/main/cover.png",
-  "categories": [
-    "network",
-    "services"
-  ],
-  "transports": [
-    "local"
-  ],
+  "categories": ["network", "services"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
@@ -511,6 +506,608 @@
         "fr": "Lit les sauvegardes et l'état des VM/LXC immédiatement au lieu d'attendre le prochain rafraîchissement."
       },
       "timeout_seconds": 90
+    }
+  ],
+  "widgets": [
+    {
+      "key": "backups",
+      "label": {
+        "en": "Proxmox backups",
+        "fr": "Sauvegardes Proxmox"
+      },
+      "description": {
+        "en": "Last backup of every node, failures first.",
+        "fr": "Dernière sauvegarde de chaque nœud, les échecs en premier."
+      },
+      "icon": "archive",
+      "action_timeout_seconds": 90
+    },
+    {
+      "key": "guests",
+      "label": {
+        "en": "Proxmox VM/LXC",
+        "fr": "VM/LXC Proxmox"
+      },
+      "description": {
+        "en": "State of every VM and LXC, the ones not running first.",
+        "fr": "État de chaque VM et LXC, celles qui ne tournent pas en premier."
+      },
+      "icon": "server",
+      "settings": [
+        {
+          "key": "show",
+          "type": "select",
+          "label": {
+            "en": "Show",
+            "fr": "Afficher"
+          },
+          "required": false,
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": {
+                "en": "Every VM/LXC",
+                "fr": "Toutes les VM/LXC"
+              }
+            },
+            {
+              "value": "not_running",
+              "label": {
+                "en": "Only the ones not running",
+                "fr": "Seulement celles arrêtées"
+              }
+            }
+          ]
+        }
+      ],
+      "action_timeout_seconds": 90
+    },
+    {
+      "key": "node",
+      "label": {
+        "en": "Proxmox node",
+        "fr": "Nœud Proxmox"
+      },
+      "description": {
+        "en": "One node: backup, SMART, disk temperatures, backup durations.",
+        "fr": "Un nœud : sauvegarde, SMART, température des disques, durées."
+      },
+      "icon": "hard-drive",
+      "settings": [
+        {
+          "key": "node",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Proxmox node",
+            "fr": "Nœud Proxmox"
+          },
+          "description": {
+            "en": "Pick a node device, not a VM/LXC.",
+            "fr": "Choisissez un appareil nœud, pas une VM/LXC."
+          },
+          "required": true
+        }
+      ],
+      "action_timeout_seconds": 60
+    }
+  ],
+  "scene_triggers": [
+    {
+      "key": "backup_finished",
+      "label": {
+        "en": "Proxmox backup finished",
+        "fr": "Sauvegarde Proxmox terminée"
+      },
+      "description": {
+        "en": "A backup task (vzdump) of a node has ended, successfully or not.",
+        "fr": "Une tâche de sauvegarde (vzdump) d'un nœud s'est terminée, avec succès ou non."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Proxmox node",
+            "fr": "Nœud Proxmox"
+          },
+          "description": {
+            "en": "Leave empty for any node.",
+            "fr": "Laissez vide pour n'importe quel nœud."
+          },
+          "required": false
+        },
+        {
+          "key": "result",
+          "type": "select",
+          "label": {
+            "en": "Result",
+            "fr": "Résultat"
+          },
+          "description": {
+            "en": "Leave empty for any result.",
+            "fr": "Laissez vide pour n'importe quel résultat."
+          },
+          "required": false,
+          "options": [
+            {
+              "value": "ok",
+              "label": {
+                "en": "Succeeded",
+                "fr": "Réussie"
+              }
+            },
+            {
+              "value": "failed",
+              "label": {
+                "en": "Failed",
+                "fr": "Échouée"
+              }
+            }
+          ]
+        }
+      ],
+      "variables": [
+        {
+          "key": "node",
+          "type": "string",
+          "label": {
+            "en": "Node",
+            "fr": "Nœud"
+          }
+        },
+        {
+          "key": "server",
+          "type": "string",
+          "label": {
+            "en": "Proxmox server",
+            "fr": "Serveur Proxmox"
+          }
+        },
+        {
+          "key": "result",
+          "type": "string",
+          "label": {
+            "en": "Result (ok / failed)",
+            "fr": "Résultat (ok / failed)"
+          }
+        },
+        {
+          "key": "status",
+          "type": "string",
+          "label": {
+            "en": "Backup status",
+            "fr": "Statut de la sauvegarde"
+          }
+        },
+        {
+          "key": "started_at",
+          "type": "string",
+          "label": {
+            "en": "Started at",
+            "fr": "Début"
+          }
+        },
+        {
+          "key": "duration_seconds",
+          "type": "number",
+          "label": {
+            "en": "Duration (s)",
+            "fr": "Durée (s)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "guest_status_changed",
+      "label": {
+        "en": "Proxmox VM/LXC state changed",
+        "fr": "État d'une VM/LXC Proxmox modifié"
+      },
+      "description": {
+        "en": "A VM or an LXC went from one state to another (running, stopped...).",
+        "fr": "Une VM ou un LXC a changé d'état (running, stopped...)."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "VM or LXC",
+            "fr": "VM ou LXC"
+          },
+          "description": {
+            "en": "Leave empty for any VM/LXC.",
+            "fr": "Laissez vide pour n'importe quelle VM/LXC."
+          },
+          "required": false
+        },
+        {
+          "key": "status",
+          "type": "multi_select",
+          "label": {
+            "en": "New state",
+            "fr": "Nouvel état"
+          },
+          "description": {
+            "en": "Leave empty for any state.",
+            "fr": "Laissez vide pour n'importe quel état."
+          },
+          "required": false,
+          "options": [
+            {
+              "value": "running",
+              "label": {
+                "en": "Running",
+                "fr": "En marche (running)"
+              }
+            },
+            {
+              "value": "stopped",
+              "label": {
+                "en": "Stopped",
+                "fr": "Arrêtée (stopped)"
+              }
+            },
+            {
+              "value": "paused",
+              "label": {
+                "en": "Paused",
+                "fr": "En pause (paused)"
+              }
+            },
+            {
+              "value": "suspended",
+              "label": {
+                "en": "Suspended",
+                "fr": "Suspendue (suspended)"
+              }
+            }
+          ]
+        }
+      ],
+      "variables": [
+        {
+          "key": "name",
+          "type": "string",
+          "label": {
+            "en": "Name",
+            "fr": "Nom"
+          }
+        },
+        {
+          "key": "vmid",
+          "type": "number",
+          "label": {
+            "en": "VMID",
+            "fr": "VMID"
+          }
+        },
+        {
+          "key": "kind",
+          "type": "string",
+          "label": {
+            "en": "Kind (qemu / lxc)",
+            "fr": "Type (qemu / lxc)"
+          }
+        },
+        {
+          "key": "node",
+          "type": "string",
+          "label": {
+            "en": "Node",
+            "fr": "Nœud"
+          }
+        },
+        {
+          "key": "server",
+          "type": "string",
+          "label": {
+            "en": "Proxmox server",
+            "fr": "Serveur Proxmox"
+          }
+        },
+        {
+          "key": "status",
+          "type": "string",
+          "label": {
+            "en": "New state",
+            "fr": "Nouvel état"
+          }
+        },
+        {
+          "key": "previous_status",
+          "type": "string",
+          "label": {
+            "en": "Previous state",
+            "fr": "État précédent"
+          }
+        }
+      ]
+    },
+    {
+      "key": "disk_failed",
+      "label": {
+        "en": "Proxmox disk failing (SMART)",
+        "fr": "Disque Proxmox en panne (SMART)"
+      },
+      "description": {
+        "en": "The SMART verdict of a disk of a node turned to failed.",
+        "fr": "Le verdict SMART d'un disque d'un nœud est passé en échec."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Proxmox node",
+            "fr": "Nœud Proxmox"
+          },
+          "description": {
+            "en": "Leave empty for any node.",
+            "fr": "Laissez vide pour n'importe quel nœud."
+          },
+          "required": false
+        }
+      ],
+      "variables": [
+        {
+          "key": "node",
+          "type": "string",
+          "label": {
+            "en": "Node",
+            "fr": "Nœud"
+          }
+        },
+        {
+          "key": "server",
+          "type": "string",
+          "label": {
+            "en": "Proxmox server",
+            "fr": "Serveur Proxmox"
+          }
+        },
+        {
+          "key": "disk",
+          "type": "string",
+          "label": {
+            "en": "Disk",
+            "fr": "Disque"
+          }
+        },
+        {
+          "key": "model",
+          "type": "string",
+          "label": {
+            "en": "Disk model",
+            "fr": "Modèle du disque"
+          }
+        },
+        {
+          "key": "health",
+          "type": "string",
+          "label": {
+            "en": "SMART verdict",
+            "fr": "Verdict SMART"
+          }
+        }
+      ]
+    }
+  ],
+  "scene_actions": [
+    {
+      "key": "refresh",
+      "label": {
+        "en": "Refresh Proxmox",
+        "fr": "Rafraîchir Proxmox"
+      },
+      "description": {
+        "en": "Reads every node and VM/LXC now, and counts the results.",
+        "fr": "Lit tous les nœuds et VM/LXC maintenant, et compte les résultats."
+      },
+      "timeout_seconds": 90,
+      "outputs": [
+        {
+          "key": "backups_ok",
+          "type": "number",
+          "label": {
+            "en": "Nodes with a successful backup",
+            "fr": "Nœuds avec une sauvegarde réussie"
+          }
+        },
+        {
+          "key": "backups_failed",
+          "type": "number",
+          "label": {
+            "en": "Nodes with a failed backup",
+            "fr": "Nœuds avec une sauvegarde en échec"
+          }
+        },
+        {
+          "key": "backups_unknown",
+          "type": "number",
+          "label": {
+            "en": "Nodes with no backup",
+            "fr": "Nœuds sans sauvegarde"
+          }
+        },
+        {
+          "key": "guests_running",
+          "type": "number",
+          "label": {
+            "en": "VM/LXC running",
+            "fr": "VM/LXC en marche"
+          }
+        },
+        {
+          "key": "guests_not_running",
+          "type": "number",
+          "label": {
+            "en": "VM/LXC not running",
+            "fr": "VM/LXC arrêtées"
+          }
+        },
+        {
+          "key": "errors",
+          "type": "number",
+          "label": {
+            "en": "Devices that could not be read",
+            "fr": "Appareils illisibles"
+          }
+        }
+      ]
+    },
+    {
+      "key": "get_backup_status",
+      "label": {
+        "en": "Get the last Proxmox backup",
+        "fr": "Lire la dernière sauvegarde Proxmox"
+      },
+      "description": {
+        "en": "The last backup of one node, for the next actions of the scene.",
+        "fr": "La dernière sauvegarde d'un nœud, pour les actions suivantes de la scène."
+      },
+      "timeout_seconds": 60,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Proxmox node",
+            "fr": "Nœud Proxmox"
+          },
+          "description": {
+            "en": "The node to read.",
+            "fr": "Le nœud à lire."
+          },
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "node",
+          "type": "string",
+          "label": {
+            "en": "Node",
+            "fr": "Nœud"
+          }
+        },
+        {
+          "key": "has_backup",
+          "type": "boolean",
+          "label": {
+            "en": "A backup was found",
+            "fr": "Une sauvegarde a été trouvée"
+          }
+        },
+        {
+          "key": "success",
+          "type": "boolean",
+          "label": {
+            "en": "Backup succeeded",
+            "fr": "Sauvegarde réussie"
+          }
+        },
+        {
+          "key": "status",
+          "type": "string",
+          "label": {
+            "en": "Backup status",
+            "fr": "Statut de la sauvegarde"
+          }
+        },
+        {
+          "key": "last_backup",
+          "type": "string",
+          "label": {
+            "en": "Last backup",
+            "fr": "Dernière sauvegarde"
+          }
+        },
+        {
+          "key": "duration_seconds",
+          "type": "number",
+          "label": {
+            "en": "Duration (s)",
+            "fr": "Durée (s)"
+          }
+        },
+        {
+          "key": "smart_status",
+          "type": "string",
+          "label": {
+            "en": "SMART status",
+            "fr": "État SMART"
+          }
+        }
+      ]
+    },
+    {
+      "key": "get_guest_status",
+      "label": {
+        "en": "Get a Proxmox VM/LXC state",
+        "fr": "Lire l'état d'une VM/LXC Proxmox"
+      },
+      "description": {
+        "en": "The state of one VM or LXC, for the next actions of the scene.",
+        "fr": "L'état d'une VM ou d'un LXC, pour les actions suivantes de la scène."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "VM or LXC",
+            "fr": "VM ou LXC"
+          },
+          "description": {
+            "en": "The VM/LXC to read.",
+            "fr": "La VM/LXC à lire."
+          },
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "status",
+          "type": "string",
+          "label": {
+            "en": "State",
+            "fr": "État"
+          }
+        },
+        {
+          "key": "running",
+          "type": "boolean",
+          "label": {
+            "en": "Running",
+            "fr": "En marche"
+          }
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "label": {
+            "en": "Name",
+            "fr": "Nom"
+          }
+        },
+        {
+          "key": "node",
+          "type": "string",
+          "label": {
+            "en": "Node",
+            "fr": "Nœud"
+          }
+        }
+      ]
     }
   ]
 }

@@ -23,6 +23,7 @@ import { fetchGuest } from '../proxmox/guests.js';
 import { scopeId } from '../servers.js';
 import { devicePollFrequency } from '../poll.js';
 import { formatGuestStatus } from '../format.js';
+import { observeGuest } from '../observe.js';
 import { textFeature } from './features.js';
 
 export const DEVICE_TYPE = 'proxmox-guest';
@@ -101,12 +102,14 @@ export async function pollGuest(gladys, server, key) {
 
   logger.debug(`${server.label}: guest ${key} (${guest.node}): ${guest.status}`);
 
+  const ids = guestExternalIds(gladys, server, key);
   await gladys.publishStates([
     {
-      device_feature_external_id: guestExternalIds(gladys, server, key).feature(FEATURE.STATUS),
+      device_feature_external_id: ids.feature(FEATURE.STATUS),
       text: formatGuestStatus(guest),
     },
   ]);
+  await observeGuest(gladys, server, ids.device, guest);
 
   return guest;
 }

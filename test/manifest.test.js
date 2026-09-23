@@ -11,6 +11,8 @@ import { readFile } from 'node:fs/promises';
 import { DEFAULT_CONFIG, DISKS_MONITORING_VALUES } from '../src/config.js';
 import { DATE_FORMAT_VALUES } from '../src/format.js';
 import { SERVER_IDS, serverConfigKeys } from '../src/servers.js';
+import { BACKUP_RESULT, SCENE_ACTION, SCENE_TRIGGER, WIDGET } from '../src/capabilities.js';
+import { GUESTS_SHOW } from '../src/widgets.js';
 
 const manifest = JSON.parse(
   await readFile(new URL('../gladys-assistant-integration.json', import.meta.url), 'utf8'),
@@ -168,6 +170,106 @@ test('the store description stays under the 100 character cap', () => {
     assert.ok(
       text.length <= 100,
       `manifest.description.${lang} is ${text.length} characters, the store allows 100`,
+    );
+  }
+});
+
+/**
+ * The minimum Gladys version a manifest range declares.
+ * @returns {number[]} `[major, minor, patch]`.
+ */
+function minimumGladysVersion() {
+  const match = manifest.gladys_version.match(/>=\s*(\d+)\.(\d+)\.(\d+)/);
+  assert.ok(match, 'gladys_version must declare a minimum version');
+  return match.slice(1).map(Number);
+}
+
+test('widgets and scene declarations require Gladys >= 5.1.0', () => {
+  // Older cores reject the unknown manifest fields: the store indexer refuses
+  // a lower minimum, and so does this test.
+  const [major, minor] = minimumGladysVersion();
+  assert.ok(major > 5 || (major === 5 && minor >= 1), manifest.gladys_version);
+});
+
+test('the declared capability keys are the ones the code uses', () => {
+  // A key is stored by the dashboards and the scenes: it must never drift.
+  const keys = (list) => (list ?? []).map((entry) => entry.key).sort();
+  assert.deepEqual(keys(manifest.widgets), Object.values(WIDGET).sort());
+  assert.deepEqual(keys(manifest.scene_triggers), Object.values(SCENE_TRIGGER).sort());
+  assert.deepEqual(keys(manifest.scene_actions), Object.values(SCENE_ACTION).sort());
+});
+
+test('every widget and every scene action has a registered handler', () => {
+  for (const name of Object.keys(WIDGET)) {
+    assert.match(source, new RegExp(`onWidgetGet\\(WIDGET\\.${name}\\b`), `widget ${name}`);
+  }
+  assert.match(source, /onWidgetAction\(/, 'the widget buttons need a handler');
+  for (const name of Object.keys(SCENE_ACTION)) {
+    assert.match(
+      source,
+      new RegExp(`onSceneAction\\(SCENE_ACTION\\.${name}\\b`),
+      `scene action ${name}`,
+    );
+  }
+});
+
+test('the capability declarations stay bilingual', () => {
+  const declarations = [...manifest.widgets, ...manifest.scene_triggers, ...manifest.scene_actions];
+  for (const declaration of declarations) {
+    assert.ok(declaration.label?.en && declaration.label?.fr, `${declaration.key}.label`);
+    assert.ok(declaration.description?.en && declaration.description?.fr, declaration.key);
+    const fields = [
+      ...(declaration.settings ?? []),
+      ...(declaration.fields ?? []),
+      ...(declaration.variables ?? []),
+      ...(declaration.outputs ?? []),
+    ];
+    for (const field of fields) {
+      assert.ok(field.label?.en && field.label?.fr, `${declaration.key}.${field.key}.label`);
+      for (const option of field.options ?? []) {
+        assert.ok(option.label?.en && option.label?.fr, `${declaration.key}.${field.key}`);
+      }
+    }
+  }
+});
+
+test('a node or a guest is always picked among the devices, never typed', () => {
+  const pickers = [
+    ...manifest.widgets.flatMap((widget) => widget.settings ?? []),
+    ...manifest.scene_triggers.flatMap((trigger) => trigger.fields ?? []),
+    ...manifest.scene_actions.flatMap((action) => action.fields ?? []),
+  ].filter((field) => field.key === 'device' || field.key === 'node');
+  assert.ok(pickers.length > 0);
+  for (const field of pickers) {
+    assert.equal(field.type, 'select');
+    assert.equal(field.source, 'devices');
+  }
+});
+
+test('the static options offer exactly the values the code handles', () => {
+  const values = (field) => field.options.map((option) => option.value).sort();
+
+  const show = manifest.widgets
+    .find((widget) => widget.key === WIDGET.GUESTS)
+    .settings.find((field) => field.key === 'show');
+  assert.deepEqual(values(show), Object.values(GUESTS_SHOW).sort());
+  assert.equal(show.default, GUESTS_SHOW.ALL);
+
+  const result = manifest.scene_triggers
+    .find((trigger) => trigger.key === SCENE_TRIGGER.BACKUP_FINISHED)
+    .fields.find((field) => field.key === 'result');
+  assert.deepEqual(values(result), Object.values(BACKUP_RESULT).sort());
+});
+
+test('a scene action added later never breaks a published scene', () => {
+  // A required field with no default, added to a published action, fails every
+  // scene already using it: the device pickers are the only required ones, and
+  // they have been there since the first version.
+  for (const action of manifest.scene_actions) {
+    const required = (action.fields ?? []).filter((field) => field.required === true);
+    assert.deepEqual(
+      required.map((field) => field.key),
+      action.key === SCENE_ACTION.REFRESH ? [] : ['device'],
     );
   }
 });

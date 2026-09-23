@@ -21,6 +21,9 @@ import { normalizeConfig } from './src/config.js';
 import { hasConfiguredServer, listServers } from './src/servers.js';
 import { discoverDevices, pollDevice } from './src/devices/index.js';
 import { describeError, describeFailures, refreshNow, testConnection } from './src/actions.js';
+import { SCENE_ACTION, WIDGET } from './src/capabilities.js';
+import { getBackupStatus, getGuestStatus, refreshForScene } from './src/scenes.js';
+import { backupsWidget, guestsWidget, nodeWidget, widgetAction } from './src/widgets.js';
 
 const gladys = new GladysIntegration();
 
@@ -69,6 +72,30 @@ gladys.onDeviceCreated(async (device) => {
 // --- Manifest actions: buttons in the Configuration screen -------------------
 gladys.onAction('test_connection', () => testConnection(config));
 gladys.onAction('refresh_now', () => refreshNow(gladys, config));
+
+// --- Scene actions (Gladys 5.1): what a scene can ask for --------------------
+// All of them read; `fields` arrive resolved and validated by Gladys.
+gladys.onSceneAction(SCENE_ACTION.REFRESH, () => refreshForScene(gladys, config));
+gladys.onSceneAction(SCENE_ACTION.GET_BACKUP_STATUS, (fields) =>
+  getBackupStatus(gladys, config, fields),
+);
+gladys.onSceneAction(SCENE_ACTION.GET_GUEST_STATUS, (fields) =>
+  getGuestStatus(gladys, config, fields),
+);
+// The scene TRIGGERS need no handler: they are fired by the reads themselves,
+// see `src/observe.js`.
+
+// --- Dashboard widgets (Gladys 5.1) ------------------------------------------
+gladys.onWidgetGet(WIDGET.BACKUPS, () => backupsWidget(gladys, config));
+gladys.onWidgetGet(WIDGET.GUESTS, ({ settings }) => guestsWidget(gladys, config, settings));
+gladys.onWidgetGet(WIDGET.NODE, ({ settings, units }) =>
+  nodeWidget(gladys, config, settings, units),
+);
+for (const widget of Object.values(WIDGET)) {
+  gladys.onWidgetAction(widget, (actionKey, params, { settings }) =>
+    widgetAction(gladys, config, widget, actionKey, settings),
+  );
+}
 
 // --- Configuration updated by the user ---------------------------------------
 gladys.onConfigUpdated(async (newConfig) => {

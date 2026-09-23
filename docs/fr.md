@@ -357,6 +357,71 @@ Une sauvegarde qui s'est terminée mais a sauté un invité finit en
 Seules les sauvegardes **terminées** sont lues (la liste archivée de Proxmox) :
 une sauvegarde encore en cours n'est pas encore la dernière sauvegarde.
 
+## Widgets du tableau de bord (Gladys 5.1)
+
+Trois cartes peuvent être ajoutées à un tableau de bord (_Modifier le tableau de
+bord → Ajouter une boîte → Proxmox_). Elles sont dessinées par Gladys, donc
+suivent son thème, son mode sombre et sa langue :
+
+- **Sauvegardes Proxmox** — le nombre de nœuds dont la dernière sauvegarde est
+  OK, en échec ou absente, puis une ligne par nœud, les échecs en premier
+  (`failed — no space left on device`, `OK — 16/08/2026 03:00:12`).
+- **VM/LXC Proxmox** — combien d'invités tournent ou sont arrêtés, puis une
+  ligne par VM/LXC, celles qui ne tournent pas en premier. Son réglage
+  _Afficher_ permet de ne garder que celles qui ne tournent pas.
+- **Nœud Proxmox** — un nœud, choisi dans ses réglages : la dernière sauvegarde,
+  son statut et sa durée, le verdict SMART, la température de ses quatre disques
+  les plus chauds (orange dès 50 °C, rouge dès 60 °C) et un graphique des durées
+  de sauvegarde sur le dernier mois.
+
+Chaque carte a un bouton **Rafraîchir** qui relit Proxmox tout de suite. Les
+cartes se mettent à jour à l'intervalle de rafraîchissement de l'intégration ;
+un nœud lu à l'instant par un rafraîchissement est affiché depuis cette lecture,
+donc un tableau de bord laissé ouvert ne coûte rien de plus à Proxmox.
+
+## Scènes (Gladys 5.1)
+
+### Déclencheurs
+
+Dans l'éditeur de scènes, rubrique _Intégrations_. Chacun se déclenche **une
+fois, quand la chose arrive** — jamais à chaque rafraîchissement — et un filtre
+laissé vide veut dire « n'importe lequel ».
+
+| Déclencheur                           | Se déclenche quand                                                      | Filtres                        | Variables pour les actions suivantes                                   |
+| ------------------------------------- | ----------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| **Sauvegarde Proxmox terminée**       | une tâche de sauvegarde d'un nœud s'est terminée                        | nœud, résultat (réussie/échec) | `node`, `server`, `result`, `status`, `started_at`, `duration_seconds` |
+| **État d'une VM/LXC Proxmox modifié** | une VM ou un LXC a changé d'état                                        | VM/LXC, nouvel état            | `name`, `vmid`, `kind`, `node`, `server`, `status`, `previous_status`  |
+| **Disque Proxmox en panne (SMART)**   | le verdict SMART d'un disque est passé en échec (SMART doit être actif) | nœud                           | `node`, `server`, `disk`, `model`, `health`                            |
+
+Exemple : _Sauvegarde Proxmox terminée_, résultat **Échouée** → envoyer un
+message « Sauvegarde de {{node}} en échec : {{status}} ».
+
+Les changements sont vus quand Proxmox est lu (l'intervalle de
+rafraîchissement), et seulement pendant que l'intégration tourne : ce qui s'est
+passé pendant un arrêt n'est pas rejoué au redémarrage. Un état de VM ou un
+verdict de disque déjà vrai au démarrage sert de point de départ, pas
+d'événement.
+
+### Actions
+
+Toutes **lisent** — une scène ne peut pas plus démarrer ou arrêter une VM que
+le reste de cette intégration.
+
+- **Rafraîchir Proxmox** — lit tous les nœuds et VM/LXC maintenant et publie
+  les états. Donne à la scène `backups_ok`, `backups_failed`, `backups_unknown`,
+  `guests_running`, `guests_not_running` et `errors` (des nombres), à tester
+  dans une condition.
+- **Lire la dernière sauvegarde Proxmox** — pour un nœud : `has_backup`,
+  `success`, `status`, `last_backup`, `duration_seconds`, `smart_status`.
+  Pratique pour un message de résumé le matin.
+- **Lire l'état d'une VM/LXC Proxmox** — pour une VM/LXC : `status`, `running`,
+  `name`, `node`.
+
+Le nœud ou la VM/LXC se choisit parmi les appareils de cette intégration :
+ajoutez-le d'abord depuis l'onglet _Découverte_. Choisir une VM pour une
+sauvegarde (ou un nœud pour un état de VM) fait échouer cette action seulement,
+avec un message qui le dit.
+
 ## Actions
 
 - **Tester la connexion** — vérifie que l'hôte répond, que le jeton d'API est

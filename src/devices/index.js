@@ -17,6 +17,7 @@ import { clearGuestsCache, fetchGuests, parseGuestKey } from '../proxmox/guests.
 import { listDisks, readsDiskTemperature } from '../proxmox/disks.js';
 import { listServers, parseScopedId, serverById } from '../servers.js';
 import { claimPoll, markPolled, resetPollThrottle } from '../poll.js';
+import { clearSnapshot } from '../observe.js';
 import {
   buildNodeDevice,
   DEVICE_TYPE as NODE_DEVICE_TYPE,
@@ -172,6 +173,8 @@ export async function discoverDevices(gladys, config) {
   // A discovery is a fresh start: whatever the previous interval had already
   // consumed must not delay the first read of the devices published here.
   resetPollThrottle();
+  // Same for the widgets: a new configuration can change what a read means.
+  clearSnapshot();
 
   const devices = [];
   const failures = [];

@@ -342,6 +342,69 @@ _OK and warnings_ if you consider those good enough.
 Only **finished** backups are read (Proxmox's archived task list): a backup
 still running is not the last backup yet.
 
+## Dashboard widgets (Gladys 5.1)
+
+Three cards can be added to a dashboard (_Edit the dashboard → Add a box →
+Proxmox_). They are drawn by Gladys itself, so they follow its theme, dark mode
+and language:
+
+- **Proxmox backups** — the number of nodes whose last backup is OK, failed, or
+  missing, then one line per node, the failures first
+  (`failed — no space left on device`, `OK — 16/08/2026 03:00:12`).
+- **Proxmox VM/LXC** — how many guests are running or stopped, then one line per
+  VM/LXC, the ones not running first. Its setting _Show_ can keep only the ones
+  that are not running.
+- **Proxmox node** — one node, picked in its settings: the last backup, its
+  status and duration, the SMART verdict, the temperature of its four hottest
+  disks (orange from 50 °C, red from 60 °C), and a chart of the backup
+  durations over the last month.
+
+Each card has a **Refresh** button that reads Proxmox again right away. The
+cards are refreshed at the refresh interval of the integration; a node read by
+a poll a moment ago is shown from that read, so a dashboard left open costs
+Proxmox nothing more.
+
+## Scenes (Gladys 5.1)
+
+### Triggers
+
+Found in the scene editor, under _Integrations_. Each one fires **once, when
+the thing happens** — never on every refresh — and leaving a filter empty means
+"any".
+
+| Trigger                          | Fires when                                                    | Filters                         | Variables for the next actions                                         |
+| -------------------------------- | ------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
+| **Proxmox backup finished**      | a backup task of a node has ended                             | node, result (succeeded/failed) | `node`, `server`, `result`, `status`, `started_at`, `duration_seconds` |
+| **Proxmox VM/LXC state changed** | a VM or an LXC went from one state to another                 | VM/LXC, new state               | `name`, `vmid`, `kind`, `node`, `server`, `status`, `previous_status`  |
+| **Proxmox disk failing (SMART)** | the SMART verdict of a disk turned to failed (needs SMART on) | node                            | `node`, `server`, `disk`, `model`, `health`                            |
+
+Typical use: _Proxmox backup finished_, result **Failed** → send a message
+"Backup of {{node}} failed: {{status}}".
+
+The changes are noticed when Proxmox is read (the refresh interval), and only
+while the integration runs: what happened while it was stopped is not replayed
+at restart. A VM state or a disk verdict already true at startup is the
+starting point, not an event.
+
+### Actions
+
+All of them **read** — a scene can no more start or stop a VM than the rest of
+this integration can.
+
+- **Refresh Proxmox** — reads every node and VM/LXC now and publishes the
+  states. Gives the scene `backups_ok`, `backups_failed`, `backups_unknown`,
+  `guests_running`, `guests_not_running` and `errors` (counts), to test in a
+  condition.
+- **Get the last Proxmox backup** — for one node: `has_backup`, `success`,
+  `status`, `last_backup`, `duration_seconds`, `smart_status`. Handy for a
+  morning summary message.
+- **Get a Proxmox VM/LXC state** — for one VM/LXC: `status`, `running`, `name`,
+  `node`.
+
+The node or the VM/LXC is picked among the devices of this integration: add it
+from the _Discover_ tab first. Picking a VM for a backup (or a node for a VM
+state) fails that action only, with a message saying so.
+
 ## Actions
 
 - **Test the connection** — checks that the host answers, that the API token is
