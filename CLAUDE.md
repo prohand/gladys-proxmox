@@ -62,11 +62,19 @@ holds no Proxmox logic. Three layers below it:
 - `src/config.js`, `src/format.js`, `src/actions.js` — normalization/bounds,
   timezone/date-format and duration rendering, and the Configuration-screen
   buttons.
+- Gladys 5.1 capabilities: `src/widgets.js` (dashboard widgets `backups`,
+  `guests`, `node` and their _Refresh_ button), `src/scenes.js` (read-only scene
+  actions), `src/observe.js` (last read of each node + transition detection
+  that fires the scene triggers and nudges the widgets), `src/capabilities.js`
+  (every widget / trigger / action key, in one place).
 
 Data flow: `onScanRequest` / `onConfigUpdated` / `connected` →
 `discoverDevices()` (per configured server) → `publishDiscoveredDevices()`;
 `onPoll(device)` → `pollDevice()` → `pollNode()` or `pollGuest()` →
-`publishStates()`. `onDeviceCreated(device)` takes the same path with
+`publishStates()`. `pollNode()` / `pollGuest()` then hand what they read to `observeNode()` /
+`observeGuest()`. `onWidgetGet` → `readNode()` (the last read if younger than
+the refresh interval, else a fresh one, observed too). `onDeviceCreated(device)`
+takes the same path with
 `{ force: true }`: a discovered device is created with no state at all, and
 waiting for the next tick left it empty on screen right after the user added
 it.
@@ -131,6 +139,21 @@ it.
   `disks.js` and read without it from then on. `/cluster/resources` answers are cached ~15 s so one poll round
   of a 40-guest cluster is one request; `force: true` / `clearGuestsCache()`
   bypass it for discovery and explicit refreshes.
+- **Scene triggers fire once per TRANSITION, never per read.** `src/observe.js`
+  remembers the last finished backup (upid), the failed disks and the guest
+  states. The first read of a guest or a disk is a baseline (no event), so a
+  restart never re-fires; a backup is announced on its first read only if it
+  ended after the process started. Everything there is best-effort: a
+  `publishSceneEvent` / `requestWidgetRefresh` failure is logged, never thrown
+  into the poll.
+- **Capability keys are forever.** Widget, scene trigger and scene action keys
+  (`src/capabilities.js`) are stored by dashboards and scenes: never rename or
+  remove one, and never add a `required` scene-action field without a
+  `default`. Declaring any of them needs `gladys_version >= 5.1.0`. Scene
+  actions stay read-only like the rest.
+- **Widget contents must pass `validateWidgetContent()` with no issue** (tests
+  assert `[]`): texts are cut with `clip()` to the vocabulary bounds, at most 8
+  components (1 focal, 6 tiles, 1 status list, 2 texts).
 - **User-facing strings are bilingual** `{ en, fr }` objects — connection status
   messages, action results, manifest labels. Keep both, and mirror any manifest
   change in `docs/en.md` _and_ `docs/fr.md`.
@@ -142,7 +165,8 @@ store indexer. It must stay in sync with the code, and `test/manifest.test.js`
 pins that: manifest defaults ≡ `DEFAULT_CONFIG`, every action key has an
 `onAction` handler, both server blocks declare the same fields with the same
 types (only the first is `required`), `docker_image` tag ≡ `version`,
-`description.{en,fr}` ≤ 100 characters. Validate with `npx github:GladysAssistant/integration-store .`
+`description.{en,fr}` ≤ 100 characters, widget / scene keys ≡
+`src/capabilities.js`, every widget and scene action has a handler. Validate with `npx github:GladysAssistant/integration-store .`
 before publishing — the image-not-found error it reports is expected until the
 Release workflow has actually built that tag.
 
@@ -158,5 +182,5 @@ ephemeral port — two of them, for the multi-server tests — so TLS posture, t
 query string and the `401`/`403` mapping are exercised on the wire rather than
 mocked. `test/helpers/fakeGladys.js` is an in-memory stand-in for the SDK
 recording `publishStates` / `setConnectionStatus`. Module-level caches
-(`clearGuestsCache()`, `resetTypeFilterSupport()`, `resetSkipSmartSupport()`)
-leak between tests — reset them in `beforeEach`.
+(`clearGuestsCache()`, `resetTypeFilterSupport()`, `resetSkipSmartSupport()`,
+`resetObservations()`) leak between tests — reset them in `beforeEach`.

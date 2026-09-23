@@ -66,6 +66,27 @@ nothing about) reports `unknown` on **SMART status** and keeps publishing its
 backup features. A disk added after the last discovery gets its sensor on the
 next scan.
 
+### Widgets and scenes (Gladys ≥ 5.1)
+
+Since 5.1 the manifest also declares, and the code serves:
+
+- **3 dashboard widgets** — `backups` (every node, failures first), `guests`
+  (every VM/LXC, the ones not running first) and `node` (one node: verdicts,
+  hottest disks, live chart of the backup duration). Content is built from the
+  same reads as the polls and cached for one refresh interval; every card has a
+  _Refresh_ button.
+- **3 scene triggers**, fired once per transition, never per poll —
+  `backup_finished` (filter by node and result), `guest_status_changed` (filter
+  by VM/LXC and new state) and `disk_failed` (SMART verdict turned failed). A
+  state already true at startup is a baseline, not an event, so a restart never
+  re-fires.
+- **4 scene actions**, all read-only — `refresh` (with counts as outputs),
+  `get_backup_status`, `get_smart_status` (the disks of a node, kept apart from
+  the backups) and `get_guest_status`.
+
+Keys live in `src/capabilities.js` and are **forever**: dashboards and scenes
+store them. Declaring them requires `gladys_version >= 5.1.0`.
+
 ## Required Proxmox permissions
 
 **`Sys.Audit` on `/nodes`** (read the backup task log, and the disks) and
@@ -144,6 +165,10 @@ dependencies** beyond the SDK.
 │  │  ├─ proxmoxNode.js              #   the node device: its backup and disk features, and its poll
 │  │  └─ proxmoxGuest.js             #   the guest device: its status feature, and its poll
 │  ├─ actions.js                     # the Configuration screen buttons
+│  ├─ capabilities.js                # widget / scene trigger / scene action keys (forever)
+│  ├─ widgets.js                     # the dashboard widgets (Gladys 5.1) and their button
+│  ├─ scenes.js                      # the scene actions (Gladys 5.1), all read-only
+│  ├─ observe.js                     # last read of each node, and the scene events it fires
 │  ├─ poll.js                        # the frequencies Gladys accepts, and the real interval
 │  ├─ format.js                      # timestamps in the user's zone and format, durations, summaries
 │  ├─ servers.js                     # the flat form -> the list of Proxmox servers, and id scoping

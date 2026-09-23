@@ -5,6 +5,8 @@
 //   - externalIds(type, platformId) -> { device, feature(key) }
 //   - publishStates                 -> record calls so tests can assert them
 //   - setConnectionStatus           -> record calls so tests can assert them
+//   - publishSceneEvent             -> record the scene events fired
+//   - requestWidgetRefresh          -> record the widget nudges
 // This lets us test the wiring (discovery payloads, dispatch, published
 // states) without a running Gladys server or a real WebSocket.
 // -----------------------------------------------------------------------------
@@ -17,10 +19,14 @@
 export function createFakeGladys(selector = 'proxmox') {
   const published = [];
   const connectionStatuses = [];
+  const sceneEvents = [];
+  const widgetRefreshes = [];
 
   return {
     published,
     connectionStatuses,
+    sceneEvents,
+    widgetRefreshes,
 
     externalIds(type, platformId) {
       const device = `ext:${selector}:${type}:${platformId}`;
@@ -36,6 +42,15 @@ export function createFakeGladys(selector = 'proxmox') {
 
     async setConnectionStatus(connected, message) {
       connectionStatuses.push({ connected, message });
+    },
+
+    async publishSceneEvent(key, data) {
+      sceneEvents.push({ key, data });
+      return { success: true };
+    },
+
+    requestWidgetRefresh(key) {
+      widgetRefreshes.push(key);
     },
   };
 }

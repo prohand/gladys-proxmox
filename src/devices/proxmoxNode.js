@@ -53,6 +53,7 @@ import {
 } from '../proxmox/disks.js';
 import { devicePollFrequency } from '../poll.js';
 import { scopeId } from '../servers.js';
+import { observeNode, recentNodeState } from '../observe.js';
 import {
   formatBackupStatus,
   formatBackupSummary,
@@ -226,6 +227,37 @@ async function publishDiskTemperatures(gladys, ids, disks) {
 }
 
 /**
+ * Read the last backup of one node, and its disks, straight from Proxmox.
+ * @param {object} server - The server the node belongs to.
+ * @param {string} node - Proxmox node name.
+ * @returns {Promise<{backup: object|null, disks: object[]|null}>} What was read.
+ */
+export async function readNodeState(server, node) {
+  const backup = await fetchLastBackup(server, node);
+  const disks = await readDisks(server, node);
+  return { backup, disks };
+}
+
+/**
+ * The state of one node for a reader that publishes nothing — a dashboard
+ * widget, a scene action: the last read when it is younger than the refresh
+ * interval, a fresh one otherwise.
+ * @param {object} gladys - The SDK instance.
+ * @param {object} server - The server the node belongs to.
+ * @param {string} node - Proxmox node name.
+ * @returns {Promise<{backup: object|null, disks: object[]|null}>} The state.
+ */
+export async function readNode(gladys, server, node) {
+  const recent = recentNodeState(server, node, server.poll_frequency);
+  if (recent) {
+    return recent;
+  }
+  const state = await readNodeState(server, node);
+  await observeNode(gladys, server, node, nodeExternalIds(gladys, server, node).device, state);
+  return state;
+}
+
+/**
  * Read the last backup of one node — and its disks — and publish its features.
  * @param {object} gladys - The SDK instance.
  * @param {object} server - The server the node belongs to.
@@ -235,8 +267,7 @@ async function publishDiskTemperatures(gladys, ids, disks) {
 export async function pollNode(gladys, server, node) {
   const ids = nodeExternalIds(gladys, server, node);
   const timezone = resolveTimezone(server.timezone);
-  const backup = await fetchLastBackup(server, node);
-  const disks = await readDisks(server, node);
+  const { backup, disks } = await readNodeState(server, node);
 
   // The text features always get a state: "unknown" is an answer too, and it is
   // the one the user needs when a backup job silently stopped running — where
@@ -289,6 +320,9 @@ export async function pollNode(gladys, server, node) {
       );
     }
   }
+
+  // After the states: a scene started by this read must find them up to date.
+  await observeNode(gladys, server, node, ids.device, { backup, disks });
 
   return backup;
 }
