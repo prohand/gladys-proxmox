@@ -10,13 +10,8 @@
   "docker_image": "ghcr.io/prohand/gladys-proxmox:2.0.0",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/prohand/gladys-proxmox/main/cover.png",
-  "categories": [
-    "network",
-    "services"
-  ],
-  "transports": [
-    "local"
-  ],
+  "categories": ["network", "services"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",

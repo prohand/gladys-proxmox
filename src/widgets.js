@@ -39,7 +39,6 @@ import {
   formatDuration,
   formatLastBackup,
   formatSmartStatus,
-  formatTimestamp,
   resolveTimezone,
 } from './format.js';
 
@@ -51,11 +50,14 @@ const MAX = {
   TILE_LABEL: 24,
   STATUS_LABEL: 40,
   STATUS_VALUE: 40,
+  CARD_TITLE: 60,
+  CARD_SUBTITLE: 60,
 };
 
-// A status list holds 10 rows, the value tiles of one card 6 — the node card
-// keeps 4 of them for its disks, to fit its 8 components.
+// A status list holds 10 rows, a card list 8, the value tiles of one card 6 —
+// the node card keeps 4 of them for its disks, to fit its 8 components.
 const MAX_STATUS_ROWS = 10;
+const MAX_BACKUP_CARDS = 8;
 const MAX_DISK_TILES = 4;
 
 // Disk temperature colors, in °C: most drives are rated up to 60 °C, and run
@@ -194,42 +196,39 @@ function countTile(label, value, color) {
 const BACKUP_ORDER = { failed: 0, error: 1, none: 2, ok: 3 };
 
 /**
- * One row of the backups list.
+ * One card of the backups list, shaped like the backup cards of other Gladys
+ * integrations: the node as the title, the date of the backup under it
+ * (rendered by Gladys, in the reader's locale), and a colored verdict badge.
  * @param {object} entry - `{ server, node, backup?, error? }`.
  * @param {boolean} named - Whether the server label must be shown.
- * @returns {object} A status item.
+ * @returns {object} A card-list item.
  */
-function backupRow(entry, named) {
+function backupCard(entry, named) {
   const { server, node, backup, error } = entry;
-  const label = clip(rowLabel(server, node, named), MAX.STATUS_LABEL);
+  const title = clip(rowLabel(server, node, named), MAX.CARD_TITLE);
   if (error) {
     return {
-      label,
-      value: { en: 'read failed', fr: 'lecture impossible' },
-      color: WIDGET_COLORS.DANGER,
+      title,
+      badge: { text: { en: 'Read failed', fr: 'Illisible' }, color: WIDGET_COLORS.DANGER },
     };
   }
   if (!backup) {
     const days = server.backup_lookback_days;
     return {
-      label,
-      value: { en: `no backup in ${days} d`, fr: `aucune sur ${days} j` },
-      color: WIDGET_COLORS.WARNING,
+      title,
+      subtitle: { en: `No backup in ${days} d`, fr: `Aucune sauvegarde sur ${days} j` },
+      badge: { text: { en: 'None', fr: 'Aucune' }, color: WIDGET_COLORS.WARNING },
     };
   }
+  const card = { title, date: new Date(backup.starttime * 1000).toISOString() };
   if (!backup.success) {
-    return {
-      label,
-      value: clip(formatBackupStatus(backup), MAX.STATUS_VALUE),
-      color: WIDGET_COLORS.DANGER,
-    };
+    // The reason Proxmox gave, where the capture has nothing: worth the line.
+    card.subtitle = clip(formatBackupStatus(backup), MAX.CARD_SUBTITLE);
+    card.badge = { text: { en: 'Failed', fr: 'Échec' }, color: WIDGET_COLORS.DANGER };
+  } else {
+    card.badge = { text: { en: 'Succeeded', fr: 'Réussie' }, color: WIDGET_COLORS.SUCCESS };
   }
-  const when = formatTimestamp(
-    backup.starttime,
-    resolveTimezone(server.timezone),
-    server.date_format,
-  );
-  return { label, value: clip(`OK — ${when}`, MAX.STATUS_VALUE), color: WIDGET_COLORS.SUCCESS };
+  return card;
 }
 
 /**
@@ -291,7 +290,7 @@ export async function backupsWidget(gladys, config) {
     try {
       const read = await readBackups(gladys, server);
       entries.push(...read);
-      // A row only says "read failed": the reason goes under the list, once.
+      // A card only says "read failed": the reason goes under the list, once.
       const failed = read.find((entry) => entry.error);
       if (failed) {
         problems.push(serverProblem(server, failed.error, named));
@@ -323,11 +322,12 @@ export async function backupsWidget(gladys, config) {
   ];
   if (sorted.length > 0) {
     components.push({
-      type: 'status',
-      items: sorted.slice(0, MAX_STATUS_ROWS).map((entry) => backupRow(entry, named)),
+      type: 'card-list',
+      display: 'list',
+      items: sorted.slice(0, MAX_BACKUP_CARDS).map((entry) => backupCard(entry, named)),
     });
   }
-  const note = footnote(problems, Math.max(0, sorted.length - MAX_STATUS_ROWS));
+  const note = footnote(problems, Math.max(0, sorted.length - MAX_BACKUP_CARDS));
   if (note) {
     components.push(note);
   }
