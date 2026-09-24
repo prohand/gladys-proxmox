@@ -364,8 +364,10 @@ bord → Ajouter une boîte → Proxmox_). Elles sont dessinées par Gladys, don
 suivent son thème, son mode sombre et sa langue :
 
 - **Sauvegardes Proxmox** — le nombre de nœuds dont la dernière sauvegarde est
-  OK, en échec ou absente, puis une ligne par nœud, les échecs en premier
-  (`failed — no space left on device`, `OK — 16/08/2026 03:00:12`).
+  OK, en échec ou absente, puis une carte par nœud (8 au plus), les échecs en
+  premier : le nom du nœud, la date de sa dernière sauvegarde et un badge de
+  couleur _Réussie_ / _Échec_ / _Aucune_ (un échec affiche aussi le message de
+  Proxmox).
 - **VM/LXC Proxmox** — combien d'invités tournent ou sont arrêtés, puis une
   ligne par VM/LXC, celles qui ne tournent pas en premier. Son réglage
   _Afficher_ permet de ne garder que celles qui ne tournent pas.

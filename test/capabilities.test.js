@@ -160,17 +160,23 @@ test('the backups widget lists failures first and counts every verdict', async (
       ['No backup', 1, 'warning'],
     ]);
 
-    const [status] = ofType(content, 'status');
+    // One card per node, like the backup cards of other integrations: the
+    // node, the date (Gladys renders it), a colored verdict badge.
+    const [list] = ofType(content, 'card-list');
+    assert.equal(list.display, 'list');
     assert.deepEqual(
-      status.items.map((item) => [item.label, item.color]),
+      list.items.map((item) => [item.title, item.badge.text.fr, item.badge.color]),
       [
-        ['pve2', 'danger'],
-        ['pve3', 'warning'],
-        ['pve1', 'success'],
+        ['pve2', 'Échec', 'danger'],
+        ['pve3', 'Aucune', 'warning'],
+        ['pve1', 'Réussie', 'success'],
       ],
     );
-    assert.equal(status.items[0].value, 'failed — no space left on device');
-    assert.match(status.items[2].value, /^OK — \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    assert.equal(list.items[0].subtitle, 'failed — no space left on device');
+    assert.match(list.items[0].date, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(list.items[1].date, undefined, 'no backup, no date');
+    assert.match(list.items[2].date, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    assert.equal(list.items[2].subtitle, undefined);
 
     const [button] = ofType(content, 'button');
     assert.deepEqual(button.action, { key: 'refresh' });

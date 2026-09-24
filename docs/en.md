@@ -349,8 +349,9 @@ Proxmox_). They are drawn by Gladys itself, so they follow its theme, dark mode
 and language:
 
 - **Proxmox backups** — the number of nodes whose last backup is OK, failed, or
-  missing, then one line per node, the failures first
-  (`failed — no space left on device`, `OK — 16/08/2026 03:00:12`).
+  missing, then one card per node (up to 8), the failures first: the node name,
+  the date of its last backup, and a colored badge _Succeeded_ / _Failed_ /
+  _None_ (a failure also shows what Proxmox said).
 - **Proxmox VM/LXC** — how many guests are running or stopped, then one line per
   VM/LXC, the ones not running first. Its setting _Show_ can keep only the ones
   that are not running.
