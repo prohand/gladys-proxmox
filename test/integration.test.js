@@ -16,7 +16,7 @@ import { clearGuestsCache, fetchGuests } from '../src/proxmox/guests.js';
 import { fetchDisksHealth, resetSkipSmartSupport } from '../src/proxmox/disks.js';
 import { GLADYS_POLL_FREQUENCIES, resetPollThrottle } from '../src/poll.js';
 import { listNodes } from '../src/proxmox/nodes.js';
-import { refreshNow, testConnection } from '../src/actions.js';
+import { ActionFailure, refreshNow, testConnection } from '../src/actions.js';
 
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -802,6 +802,23 @@ test('a guest that vanished publishes nothing instead of a fake OFF', async () =
   }
 });
 
+/**
+ * Await an action that must fail, and return the bilingual message it failed with.
+ * @param {Promise} promise - The action.
+ * @returns {Promise<{en: string, fr: string}>} The message of its `ActionFailure`.
+ */
+async function failureOf(promise) {
+  try {
+    await promise;
+  } catch (error) {
+    assert.ok(error instanceof ActionFailure, error);
+    // What Gladys shows in red: one string, both languages.
+    assert.equal(error.message, `${error.localized.en}\n\n${error.localized.fr}`);
+    return error.localized;
+  }
+  assert.fail('the action should have failed (red), not resolved (green)');
+}
+
 test('refresh_now summarizes the backups and the running guests', async () => {
   const server = await startCluster();
   const gladys = createFakeGladys();
@@ -812,6 +829,20 @@ test('refresh_now summarizes the backups and the running guests', async () => {
     assert.match(message.en, /Last backup — pve1: .*, 4 min 8 s, OK \| pve2: no backup/);
     assert.match(message.en, /2\/3 VM\/LXC running/);
     assert.match(message.fr, /Dernière sauvegarde/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('refresh_now fails (red) when a device could not be read', async () => {
+  const server = await startCluster({ '/nodes/pve2/tasks': () => ({ status: 500 }) });
+  const gladys = createFakeGladys();
+  const config = configFor(server.port);
+  try {
+    await discoverDevices(gladys, config);
+    const message = await failureOf(refreshNow(gladys, config));
+    assert.match(message.en, /Failed on: pve2/);
+    assert.match(message.fr, /Échec sur : pve2/);
   } finally {
     await server.close();
   }
@@ -839,7 +870,7 @@ test('test_connection names the nodes whose disks the token cannot read', async 
     '/nodes/pve2/disks/list': () => ({ status: 403, data: null }),
   });
   try {
-    const message = await testConnection(configFor(server.port));
+    const message = await failureOf(testConnection(configFor(server.port)));
     assert.match(message.en, /The disk list could not be read on: pve2/);
     assert.match(message.fr, /La liste des disques/);
   } finally {
@@ -876,7 +907,7 @@ test('test_connection names the nodes whose task log the token cannot read', asy
   // trap this probe exists to catch.
   const server = await startCluster({ '/nodes/pve2/status': () => ({ status: 403 }) });
   try {
-    const message = await testConnection(configFor(server.port));
+    const message = await failureOf(testConnection(configFor(server.port)));
     assert.match(message.en, /cannot read the task log of: pve2/);
     assert.match(message.en, /Sys\.Audit/);
     assert.match(message.en, /Working on: pve1/);
@@ -888,7 +919,7 @@ test('test_connection names the nodes whose task log the token cannot read', asy
 test('test_connection reports a bad token instead of a raw error', async () => {
   const server = await startFakeProxmox({ '/nodes': () => ({ status: 401 }) });
   try {
-    const message = await testConnection(configFor(server.port));
+    const message = await failureOf(testConnection(configFor(server.port)));
     assert.match(message.en, /refused the API token/);
     assert.match(message.fr, /refusé le jeton/);
   } finally {
@@ -897,14 +928,16 @@ test('test_connection reports a bad token instead of a raw error', async () => {
 });
 
 test('test_connection asks for the configuration before anything else', async () => {
-  const message = await testConnection(normalizeConfig());
+  const message = await failureOf(testConnection(normalizeConfig()));
   assert.match(message.en, /Fill in the Proxmox host/);
 });
 
 test('test_connection reports an empty node filter match', async () => {
   const server = await startCluster();
   try {
-    const message = await testConnection(configFor(server.port, { nodes_filter: 'nope' }));
+    const message = await failureOf(
+      testConnection(configFor(server.port, { nodes_filter: 'nope' })),
+    );
     assert.match(message.en, /no node matched/);
   } finally {
     await server.close();
@@ -1091,7 +1124,9 @@ test('refresh_now and test_connection name each server when there are two', asyn
     assert.match(refreshed.en, /\[Office\] .*0\/1 VM\/LXC running/);
     assert.match(refreshed.fr, /\[Office\] Dernière sauvegarde/);
 
-    const tested = await testConnection(config);
+    // The second token cannot read the disks: the whole result goes red, and
+    // still reports the first server, which is fine.
+    const tested = await failureOf(testConnection(config));
     assert.match(tested.en, /\[Proxmox\] Connection OK.*3 VM\/LXC visible/);
     assert.match(tested.en, /\[Office\] Connection OK.*1 VM\/LXC visible/);
   } finally {

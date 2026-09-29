@@ -13,6 +13,12 @@
 //
 // Both actions run on EVERY configured Proxmox server, and say which one they
 // are talking about as soon as there is more than one.
+//
+// The Configuration screen has two colours for a result: green when the
+// handler resolves, red when it throws. So a problem must THROW (an
+// `ActionFailure`), or it reads like a success. A thrown error reaches Gladys
+// as a single string — never a `{ en, fr }` object — hence both languages in
+// its message, one paragraph each (the result box keeps line breaks).
 // -----------------------------------------------------------------------------
 
 import { createLogger } from '@gladysassistant/integration-sdk';
@@ -30,6 +36,20 @@ const NOT_CONFIGURED = {
   en: 'Fill in the Proxmox host, the API token ID and its secret first, then save.',
   fr: "Renseignez d'abord l'hôte Proxmox, l'identifiant du jeton d'API et son secret, puis enregistrez.",
 };
+
+/**
+ * A result the Configuration screen must show as an error (red), not green.
+ */
+export class ActionFailure extends Error {
+  /**
+   * @param {{en: string, fr: string}} localized - The bilingual message.
+   */
+  constructor(localized) {
+    super(`${localized.en}\n\n${localized.fr}`);
+    this.name = 'ActionFailure';
+    this.localized = localized;
+  }
+}
 
 /**
  * Turn a client error into the bilingual message shown under the button.
@@ -120,7 +140,7 @@ export function describeFailures(failures, named = failures.length > 1) {
  * Count the guests the token can actually see, without failing the whole test
  * when that read is the only thing that went wrong.
  * @param {object} server - A configured server.
- * @returns {Promise<{en: string, fr: string}>} The sentence appended to the test result.
+ * @returns {Promise<{en: string, fr: string, failed?: boolean}>} The sentence appended to the test result.
  */
 async function describeGuestVisibility(server) {
   let guests;
@@ -131,6 +151,7 @@ async function describeGuestVisibility(server) {
     return {
       en: ` The VM/LXC list could not be read: ${error.message}`,
       fr: ` La liste des VM/LXC n'a pas pu être lue : ${error.message}`,
+      failed: true,
     };
   }
 
@@ -161,7 +182,7 @@ async function describeGuestVisibility(server) {
  * the SMART status, which reads like a node with no SMART data.
  * @param {object} server - A configured server.
  * @param {{node: string}[]} nodes - The nodes of that server.
- * @returns {Promise<{en: string, fr: string}>} The sentence appended to the test result.
+ * @returns {Promise<{en: string, fr: string, failed?: boolean}>} The sentence appended to the test result.
  */
 async function describeDiskVisibility(server, nodes) {
   if (!readsDisks(server)) {
@@ -195,13 +216,16 @@ async function describeDiskVisibility(server, nodes) {
   return {
     en: ` The disk list could not be read on: ${names} (${reason}).`,
     fr: ` La liste des disques n'a pas pu être lue sur : ${names} (${reason}).`,
+    failed: true,
   };
 }
 
 /**
  * Run the connection test against ONE server.
  * @param {object} server - A configured server.
- * @returns {Promise<{en: string, fr: string}>} What that server answered.
+ * @returns {Promise<{message: {en: string, fr: string}, failed: boolean}>} What that server
+ *   answered, and whether it is a problem to show in red. An empty guest list
+ *   is not one: an empty cluster looks exactly the same.
  */
 async function testServer(server) {
   let nodes;
@@ -209,13 +233,16 @@ async function testServer(server) {
     nodes = await listNodes(server);
   } catch (error) {
     logger.error(`test_connection: node listing failed on ${server.label}`, error);
-    return describeError(error);
+    return { message: describeError(error), failed: true };
   }
 
   if (nodes.length === 0) {
     return {
-      en: 'Connected, but no node matched. Clear the "Nodes to monitor" field, or check the names you listed.',
-      fr: 'Connexion réussie, mais aucun nœud ne correspond. Videz le champ « Nœuds à surveiller » ou vérifiez les noms saisis.',
+      failed: true,
+      message: {
+        en: 'Connected, but no node matched. Clear the "Nodes to monitor" field, or check the names you listed.',
+        fr: 'Connexion réussie, mais aucun nœud ne correspond. Videz le champ « Nœuds à surveiller » ou vérifiez les noms saisis.',
+      },
     };
   }
 
@@ -225,10 +252,15 @@ async function testServer(server) {
   const guestsMessage = await describeGuestVisibility(server);
   const disksMessage = await describeDiskVisibility(server, nodes);
 
+  const partial = Boolean(guestsMessage.failed || disksMessage.failed);
+
   if (denied.length === 0) {
     return {
-      en: `Connection OK. Read access granted on ${granted.length} node(s): ${granted.join(', ')}.${guestsMessage.en}${disksMessage.en}`,
-      fr: `Connexion OK. Accès en lecture accordé sur ${granted.length} nœud(s) : ${granted.join(', ')}.${guestsMessage.fr}${disksMessage.fr}`,
+      failed: partial,
+      message: {
+        en: `Connection OK. Read access granted on ${granted.length} node(s): ${granted.join(', ')}.${guestsMessage.en}${disksMessage.en}`,
+        fr: `Connexion OK. Accès en lecture accordé sur ${granted.length} nœud(s) : ${granted.join(', ')}.${guestsMessage.fr}${disksMessage.fr}`,
+      },
     };
   }
 
@@ -238,12 +270,15 @@ async function testServer(server) {
   const grantedPart = granted.length > 0 ? ` Working on: ${granted.join(', ')}.` : '';
   const grantedPartFr = granted.length > 0 ? ` Fonctionne sur : ${granted.join(', ')}.` : '';
   return {
-    en:
-      `Connected, but the token cannot read the task log of: ${denied.join(', ')}.` +
-      ` Grant Sys.Audit (role PVEAuditor) on /nodes to ${server.token_id}.${grantedPart}${guestsMessage.en}${disksMessage.en}`,
-    fr:
-      `Connexion établie, mais le jeton ne peut pas lire le journal des tâches de : ${denied.join(', ')}.` +
-      ` Accordez Sys.Audit (rôle PVEAuditor) sur /nodes à ${server.token_id}.${grantedPartFr}${guestsMessage.fr}${disksMessage.fr}`,
+    failed: true,
+    message: {
+      en:
+        `Connected, but the token cannot read the task log of: ${denied.join(', ')}.` +
+        ` Grant Sys.Audit (role PVEAuditor) on /nodes to ${server.token_id}.${grantedPart}${guestsMessage.en}${disksMessage.en}`,
+      fr:
+        `Connexion établie, mais le jeton ne peut pas lire le journal des tâches de : ${denied.join(', ')}.` +
+        ` Accordez Sys.Audit (rôle PVEAuditor) sur /nodes à ${server.token_id}.${grantedPartFr}${guestsMessage.fr}${disksMessage.fr}`,
+    },
   };
 }
 
@@ -253,19 +288,27 @@ async function testServer(server) {
  * Proxmox server.
  * @param {object} config - Normalized configuration.
  * @returns {Promise<{en: string, fr: string}>} The message shown under the button.
+ * @throws {ActionFailure} When anything went wrong on any server — with the
+ *   full report, the servers that answered fine included.
  */
 export async function testConnection(config) {
   const servers = listServers(config);
   if (servers.length === 0) {
-    return NOT_CONFIGURED;
+    throw new ActionFailure(NOT_CONFIGURED);
   }
 
   // The servers are independent: testing them in parallel keeps the action
   // inside its manifest timeout however many are configured.
-  const messages = await Promise.all(servers.map((server) => testServer(server)));
-  return joinMessages(
-    messages.map((message, index) => withServerLabel(servers[index], message, servers.length > 1)),
+  const results = await Promise.all(servers.map((server) => testServer(server)));
+  const message = joinMessages(
+    results.map((result, index) =>
+      withServerLabel(servers[index], result.message, servers.length > 1),
+    ),
   );
+  if (results.some((result) => result.failed)) {
+    throw new ActionFailure(message);
+  }
+  return message;
 }
 
 /**
@@ -308,11 +351,12 @@ function summarizeServer(server, results, timezone, dateFormat) {
  * @param {object} gladys - The SDK instance.
  * @param {object} config - Normalized configuration.
  * @returns {Promise<{en: string, fr: string}>} The message shown under the button.
+ * @throws {ActionFailure} When nothing is configured, or a device could not be read.
  */
 export async function refreshNow(gladys, config) {
   const servers = listServers(config);
   if (servers.length === 0) {
-    return NOT_CONFIGURED;
+    throw new ActionFailure(NOT_CONFIGURED);
   }
 
   const results = await pollAllDevices(gladys, config);
@@ -347,5 +391,9 @@ export async function refreshNow(gladys, config) {
       ),
     );
 
-  return joinMessages([head, ...perServer]);
+  const message = joinMessages([head, ...perServer]);
+  if (failed.length > 0) {
+    throw new ActionFailure(message);
+  }
+  return message;
 }

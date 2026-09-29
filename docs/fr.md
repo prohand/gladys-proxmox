@@ -442,6 +442,13 @@ Les deux s'exécutent sur chaque serveur configuré et préfixent chaque résult
 par `[<nom>]` dès qu'il y en a deux — un message comme
 `[Bureau] Proxmox a refusé le jeton d'API (401)` vous dit lequel corriger.
 
+Le résultat s'affiche en vert quand tout va bien, et en rouge dès que quelque
+chose demande votre attention (un serveur qui refuse, un nœud ou une liste de
+disques illisible, un appareil qui n'a pas pu être rafraîchi) — le rapport
+complet reste visible, y compris les serveurs qui ont bien répondu. Un résultat
+en rouge est écrit en anglais puis en français : Gladys affiche une erreur sous
+la forme d'un seul texte.
+
 ## Dépannage
 
 **« Proxmox a refusé le jeton d'API (401) »** — l'identifiant ou le secret est
