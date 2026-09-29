@@ -154,6 +154,11 @@ it.
 - **Widget contents must pass `validateWidgetContent()` with no issue** (tests
   assert `[]`): texts are cut with `clip()` to the vocabulary bounds, at most 8
   components (1 focal, 6 tiles, 1 status list, 2 texts).
+- **A failed action THROWS.** The Configuration screen shows a resolved result
+  in green and a thrown one in red — nothing in between. `test_connection` /
+  `refresh_now` throw an `ActionFailure` (full report, both languages in one
+  string: a thrown error reaches Gladys as text, never as `{ en, fr }`) as soon
+  as anything needs the user's attention; only an all-clear resolves.
 - **User-facing strings are bilingual** `{ en, fr }` objects — connection status
   messages, action results, manifest labels. Keep both, and mirror any manifest
   change in `docs/en.md` _and_ `docs/fr.md`.

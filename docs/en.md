@@ -424,6 +424,12 @@ Both run on every configured server, and prefix each result with `[<name>]` when
 there are two — so a message like `[Office] Proxmox refused the API token (401)`
 tells you which one to fix.
 
+The result shows in green when everything went fine, and in red as soon as
+something needs your attention (a server refused, a node or a disk list it could
+not read, a device it could not refresh) — the whole report stays visible, the
+servers that answered fine included. A red result is written in English, then in
+French: Gladys shows an error as a single text.
+
 ## Troubleshooting
 
 **"Proxmox refused the API token (401)"** — the token ID or the secret is
