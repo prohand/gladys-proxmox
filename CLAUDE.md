@@ -123,7 +123,10 @@ it.
   with `devices[0].poll_frequency: invalid poll frequency`. The configured
   interval is in seconds and goes up to an hour, so `src/poll.js` declares the
   slowest accepted value and enforces the real interval itself (`claimPoll()`);
-  an early poll publishes nothing rather than a stale re-read.
+  an early poll publishes nothing rather than a stale re-read. Devices also carry
+  `should_poll: true`: without it the core never schedules them, and it reads the
+  flag only at creation, so `index.js` runs its own one-minute loop over
+  `gladys.devices` through the same throttled `pollDevice()`.
 - **Guest ids are `<kind>-<vmid>`**, never node-based: the VMID is cluster-wide
   and survives a migration.
 - **The first server's external ids stay unscoped.** `scopeId()` prefixes only

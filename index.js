@@ -30,6 +30,45 @@ const gladys = new GladysIntegration();
 // Current configuration (hot-reloaded through onConfigUpdated).
 let config = normalizeConfig();
 
+// --- The integration's own refresh loop --------------------------------------
+// Gladys only polls a device whose row carries `should_poll: true`, a flag it
+// reads once, when the device is created: every node and guest added before
+// the flag was published would never be read again. This loop walks the
+// created devices every minute through the same `pollDevice()` as `onPoll`,
+// whose `claimPoll()` throttle keeps a device Gladys also polls at one read
+// per configured interval.
+const REFRESH_LOOP_MS = 60 * 1000;
+let refreshTimer = null;
+let refreshing = false;
+
+async function refreshCreatedDevices() {
+  if (refreshing || !hasConfiguredServer(config)) {
+    return;
+  }
+  refreshing = true;
+  try {
+    for (const device of gladys.devices ?? []) {
+      try {
+        await pollDevice(gladys, config, device);
+      } catch (error) {
+        logger.warn(`Refresh of ${device.external_id} failed: ${error.message}`);
+      }
+    }
+  } finally {
+    refreshing = false;
+  }
+}
+
+function startRefreshLoop() {
+  if (refreshTimer) {
+    return;
+  }
+  refreshTimer = setInterval(() => {
+    refreshCreatedDevices().catch((error) => logger.error('Refresh cycle failed', error));
+  }, REFRESH_LOOP_MS);
+  refreshTimer.unref?.();
+}
+
 // --- Discovery: Gladys asks for the list of devices --------------------------
 gladys.onScanRequest(async () => {
   logger.info('onScanRequest -> discovering Proxmox nodes and guests');
@@ -114,6 +153,9 @@ gladys.onConfigUpdated(async (newConfig) => {
 // The SDK logs the WebSocket lifecycle itself (under the `gladys-sdk` name):
 // this handler only runs the integration's own (re)initialization.
 gladys.on('connected', async () => {
+  // Armed first: a failed discovery (network not up yet) must not leave the
+  // created devices without a refresh.
+  startRefreshLoop();
   try {
     config = normalizeConfig(await gladys.getConfig());
   } catch (error) {
@@ -177,10 +219,11 @@ async function publishDevices() {
 
 // --- Graceful shutdown -------------------------------------------------------
 // The SDK disconnects cleanly and exits with code 0 when the supervisor stops
-// the container (SIGTERM/SIGINT). Nothing of ours to tear down: every Proxmox
+// the container (SIGTERM/SIGINT). Only the refresh loop to stop: every Proxmox
 // request is a short-lived HTTPS call with no pooled connection.
 gladys.handleShutdown((signal) => {
   logger.info(`Received ${signal} -> graceful shutdown`);
+  clearInterval(refreshTimer);
 });
 
 // --- Startup -----------------------------------------------------------------

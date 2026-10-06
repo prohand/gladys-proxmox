@@ -76,6 +76,10 @@ export function buildGuestDevice(gladys, server, guest) {
     // One of the frequencies Gladys accepts (milliseconds); the configured
     // interval is enforced by `claimPoll()`. See `src/poll.js`.
     poll_frequency: devicePollFrequency(server.poll_frequency),
+    // Gladys only schedules a device that also asks for it (`should_poll` is
+    // false by default in the core); without it onPoll was never called. The
+    // flag is read at creation only: index.js covers older devices.
+    should_poll: true,
     features: [textFeature('Status', ids.feature(FEATURE.STATUS))],
   };
 }

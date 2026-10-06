@@ -15,6 +15,10 @@ All notable changes to this integration are documented here. The format follows
 
 - Development dependencies updated to their latest versions (ESLint 10.12, Prettier 3.9.9, globals 17.13).
 
+### Fixed
+
+- Nodes and guests are read on schedule again: devices are published with `should_poll: true`, without which Gladys never polls them, and an integration-owned loop reads the devices created before that flag. Backups, SMART, disk temperatures, guest states and the scene triggers they feed were only updated when a device was created or a widget opened.
+
 ## [2.1.1] - 2026-09-29
 
 ### Changed
