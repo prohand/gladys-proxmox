@@ -24,6 +24,7 @@ import { describeError, describeFailures, refreshNow, testConnection } from './s
 import { SCENE_ACTION, WIDGET } from './src/capabilities.js';
 import { getBackupStatus, getGuestStatus, getSmartStatus, refreshForScene } from './src/scenes.js';
 import { backupsWidget, guestsWidget, nodeWidget, widgetAction } from './src/widgets.js';
+import { withPullDeadline } from './src/widgetDeadline.js';
 
 const gladys = new GladysIntegration();
 
@@ -175,10 +176,14 @@ gladys.onSceneAction(SCENE_ACTION.GET_GUEST_STATUS, (fields) =>
 // see `src/observe.js`.
 
 // --- Dashboard widgets (Gladys 5.1) ------------------------------------------
-gladys.onWidgetGet(WIDGET.BACKUPS, () => backupsWidget(gladys, config));
-gladys.onWidgetGet(WIDGET.GUESTS, ({ settings }) => guestsWidget(gladys, config, settings));
+// Each pull is raced against a deadline: a slow Proxmox must give a loading
+// card, never miss the core's 15 s and leave the card dead (src/widgetDeadline.js).
+gladys.onWidgetGet(WIDGET.BACKUPS, () => withPullDeadline(() => backupsWidget(gladys, config)));
+gladys.onWidgetGet(WIDGET.GUESTS, ({ settings }) =>
+  withPullDeadline(() => guestsWidget(gladys, config, settings)),
+);
 gladys.onWidgetGet(WIDGET.NODE, ({ settings, units }) =>
-  nodeWidget(gladys, config, settings, units),
+  withPullDeadline(() => nodeWidget(gladys, config, settings, units)),
 );
 for (const widget of Object.values(WIDGET)) {
   gladys.onWidgetAction(widget, (actionKey, params, { settings }) =>
