@@ -227,7 +227,8 @@ export function monitoredGuests(serverId) {
  * @param {object} [options] - Reading options.
  * @param {boolean} [options.force] - Read now, whatever the interval says
  *   (a device the user has just added has no state at all yet).
- * @returns {Promise<void>} Resolves once the states are published.
+ * @returns {Promise<boolean|undefined>} `true` once Proxmox was read and the states
+ *   published; nothing when the poll was skipped (unknown device, too early).
  */
 export async function pollDevice(gladys, config, device, { force = false } = {}) {
   const descriptor = describeDevice(gladys, device);
@@ -264,9 +265,10 @@ export async function pollDevice(gladys, config, device, { force = false } = {})
 
   if (descriptor.kind === 'node') {
     await pollNode(gladys, server, descriptor.node);
-    return;
+    return true;
   }
   await pollGuest(gladys, server, descriptor.key);
+  return true;
 }
 
 /**

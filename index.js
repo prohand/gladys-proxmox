@@ -24,6 +24,7 @@ import { describeError, describeFailures, refreshNow, testConnection } from './s
 import { SCENE_ACTION, WIDGET } from './src/capabilities.js';
 import { getBackupStatus, getGuestStatus, getSmartStatus, refreshForScene } from './src/scenes.js';
 import { backupsWidget, guestsWidget, nodeWidget, widgetAction } from './src/widgets.js';
+import { withPullDeadline } from './src/widgetDeadline.js';
 
 const gladys = new GladysIntegration();
 
@@ -38,6 +39,53 @@ let config = normalizeConfig();
 // whose `claimPoll()` throttle keeps a device Gladys also polls at one read
 // per configured interval.
 const REFRESH_LOOP_MS = 60 * 1000;
+
+// Devices whose last read failed, and the status last written. The status used
+// to be written by initialize() alone: a Proxmox that booted after Gladys stayed
+// red for good once it answered again, and one that went down later stayed green.
+const failingDevices = new Map();
+let reportedConnected = null;
+
+/**
+ * Keep the Configuration screen status in step with the reads, writing it only
+ * when it changes.
+ * @param {string} externalId - The device just read.
+ * @param {Error|null} error - Why its read failed, or null when it worked.
+ * @returns {Promise<void>} Resolves once Gladys stored the status, if it moved.
+ */
+async function reportPollOutcome(externalId, error) {
+  if (error) {
+    failingDevices.set(externalId, error);
+  } else {
+    failingDevices.delete(externalId);
+  }
+  const connected = failingDevices.size === 0;
+  if (connected === reportedConnected) {
+    return;
+  }
+  reportedConnected = connected;
+  const [firstError] = failingDevices.values();
+  await gladys
+    .setConnectionStatus(connected, connected ? undefined : describeError(firstError))
+    .catch(() => {});
+}
+
+/**
+ * Poll one device and report the outcome in the status.
+ * @param {object} device - The device to read.
+ * @param {object} [options] - Passed to pollDevice.
+ * @returns {Promise<void>} Resolves once the states are published.
+ */
+async function pollAndReport(device, options) {
+  try {
+    if (await pollDevice(gladys, config, device, options)) {
+      await reportPollOutcome(device.external_id, null);
+    }
+  } catch (error) {
+    await reportPollOutcome(device.external_id, error);
+    throw error;
+  }
+}
 let refreshTimer = null;
 let refreshing = false;
 
@@ -49,7 +97,7 @@ async function refreshCreatedDevices() {
   try {
     for (const device of gladys.devices ?? []) {
       try {
-        await pollDevice(gladys, config, device);
+        await pollAndReport(device);
       } catch (error) {
         logger.warn(`Refresh of ${device.external_id} failed: ${error.message}`);
       }
@@ -92,7 +140,7 @@ gladys.onPoll(async (device) => {
     logger.warn('onPoll ignored: the integration is not configured yet');
     return;
   }
-  await pollDevice(gladys, config, device);
+  await pollAndReport(device);
 });
 
 // --- Device added by the user from the Discovery tab -------------------------
@@ -105,7 +153,7 @@ gladys.onDeviceCreated(async (device) => {
     return;
   }
   logger.info(`onDeviceCreated -> first read of ${device?.external_id}`);
-  await pollDevice(gladys, config, device, { force: true });
+  await pollAndReport(device, { force: true });
 });
 
 // --- Manifest actions: buttons in the Configuration screen -------------------
@@ -128,10 +176,14 @@ gladys.onSceneAction(SCENE_ACTION.GET_GUEST_STATUS, (fields) =>
 // see `src/observe.js`.
 
 // --- Dashboard widgets (Gladys 5.1) ------------------------------------------
-gladys.onWidgetGet(WIDGET.BACKUPS, () => backupsWidget(gladys, config));
-gladys.onWidgetGet(WIDGET.GUESTS, ({ settings }) => guestsWidget(gladys, config, settings));
+// Each pull is raced against a deadline: a slow Proxmox must give a loading
+// card, never miss the core's 15 s and leave the card dead (src/widgetDeadline.js).
+gladys.onWidgetGet(WIDGET.BACKUPS, () => withPullDeadline(() => backupsWidget(gladys, config)));
+gladys.onWidgetGet(WIDGET.GUESTS, ({ settings }) =>
+  withPullDeadline(() => guestsWidget(gladys, config, settings)),
+);
 gladys.onWidgetGet(WIDGET.NODE, ({ settings, units }) =>
-  nodeWidget(gladys, config, settings, units),
+  withPullDeadline(() => nodeWidget(gladys, config, settings, units)),
 );
 for (const widget of Object.values(WIDGET)) {
   gladys.onWidgetAction(widget, (actionKey, params, { settings }) =>
@@ -188,8 +240,10 @@ async function initialize() {
     return;
   }
 
+  failingDevices.clear();
   try {
     const { failures } = await publishDevices();
+    reportedConnected = failures.length === 0;
     if (failures.length === 0) {
       await gladys.setConnectionStatus(true);
       return;
@@ -201,6 +255,7 @@ async function initialize() {
       .catch(() => {});
   } catch (error) {
     logger.error('Initialization failed', error);
+    reportedConnected = false;
     await gladys.setConnectionStatus(false, describeError(error)).catch(() => {});
   }
 }

@@ -1144,3 +1144,19 @@ test('a single server is never labelled: the message stays what it always was', 
     await server.close();
   }
 });
+
+test('pollDevice tells a read apart from a skipped poll', async () => {
+  const server = await startCluster();
+  const gladys = createFakeGladys();
+  const config = configFor(server.port);
+  try {
+    const { devices } = await discoverDevices(gladys, config);
+    // The status in the Configuration screen follows the reads, and only them:
+    // a poll that came too early says nothing about the server.
+    assert.equal(await pollDevice(gladys, config, devices[0]), true);
+    assert.equal(await pollDevice(gladys, config, devices[0]), undefined);
+    assert.equal(await pollDevice(gladys, config, { external_id: 'ext:proxmox:nope' }), undefined);
+  } finally {
+    await server.close();
+  }
+});
