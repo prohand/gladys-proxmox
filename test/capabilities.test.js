@@ -195,6 +195,56 @@ test('the backups widget reuses a recent read instead of asking Proxmox again', 
   });
 });
 
+test('the backups widget reads the backups alone, never the disks', async () => {
+  await withCluster(async ({ gladys, config, server }) => {
+    const before = server.requests.length;
+    await backupsWidget(gladys, config);
+    const paths = server.requests.slice(before).map((request) => request.path);
+    assert.equal(paths.filter((path) => path.endsWith('/tasks')).length, 3);
+    assert.deepEqual(
+      paths.filter((path) => path.includes('/disks/')),
+      [],
+      'no smartctl run for a card that shows no disk',
+    );
+
+    // The node widget still needs the disks: the backup-only read must not be
+    // served to it as a complete one.
+    const content = await nodeWidget(gladys, config, { node: NODE_1 });
+    assert.equal(ofType(content, 'value').length, 2, 'both disk temperatures');
+    assert.ok(server.requests.slice(before).some((request) => request.path.includes('/disks/')));
+  });
+});
+
+test('pulls repeated while a read is in progress join it instead of starting another', async () => {
+  await withCluster(async ({ gladys, config, server }) => {
+    const before = server.requests.length;
+    const contents = await Promise.all([
+      backupsWidget(gladys, config),
+      backupsWidget(gladys, config),
+      backupsWidget(gladys, config),
+    ]);
+    for (const content of contents) {
+      assert.deepEqual(validateWidgetContent(content), []);
+    }
+    assert.equal(
+      server.requests.slice(before).filter((request) => request.path.endsWith('/tasks')).length,
+      3,
+      'one task read per node, not one per pull',
+    );
+
+    // Same for the full read of a node (the node widget, the polls).
+    resetObservations();
+    const mark = server.requests.length;
+    await Promise.all([
+      nodeWidget(gladys, config, { node: NODE_1 }),
+      nodeWidget(gladys, config, { node: NODE_1 }),
+    ]);
+    const paths = server.requests.slice(mark).map((request) => request.path);
+    assert.equal(paths.filter((path) => path === '/nodes/pve1/tasks').length, 1);
+    assert.equal(paths.filter((path) => path === '/nodes/pve1/disks/list').length, 1);
+  });
+});
+
 test('the backups widget names what it cannot read', async () => {
   const gladys = createFakeGladys();
   // Nothing listens there.

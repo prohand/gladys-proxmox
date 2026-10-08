@@ -24,10 +24,15 @@ import { isMonitoredNode } from './nodes.js';
 
 const logger = createLogger({ name: 'proxmox-guests' });
 
-// How long one cluster snapshot is reused. Short enough that a guest that
-// changes state is seen on the next poll of any device, long enough to collapse
-// a poll round into a single request.
-export const GUESTS_CACHE_TTL_MS = 15_000;
+// How long one cluster snapshot is reused: long enough to collapse a whole
+// poll round into a single request, short enough that every refresh interval
+// reads a fresh one. A round of the integration's one-minute loop walks the
+// devices one after the other, and the nodes in it can take tens of seconds
+// (a smartctl run per disk): at 15 s, the guests polled after them re-read the
+// list in the same round. The shortest refresh interval is 60 s, and a guest is
+// polled again 55 s after its last read at the earliest (`claimPoll()` lets a
+// tick arrive 5 s early), so 50 s still gives each interval its own snapshot.
+export const GUESTS_CACHE_TTL_MS = 50_000;
 
 // The two guest kinds `/cluster/resources` reports for `type=vm`.
 const GUEST_KINDS = new Set(['qemu', 'lxc']);

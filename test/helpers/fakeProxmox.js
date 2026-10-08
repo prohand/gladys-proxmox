@@ -13,8 +13,10 @@ import { TEST_CERT, TEST_KEY } from '../fixtures/tls.js';
 /**
  * Start a fake Proxmox node on an ephemeral port.
  * @param {object} routes - Map of `/api2/json` sub-path to a handler or a value.
- *   A handler receives `{ query, headers }` and returns `{ status?, data?, body? }`;
- *   anything else is served as the `data` member of a 200 answer.
+ *   A handler receives `{ query, headers }` and returns `{ status?, data?, body? }`,
+ *   or `{ raw(res) }` to write the answer itself (a slow host); anything else is
+ *   served as the `data` member of a 200 answer. Each request is recorded with
+ *   the TLS server name (SNI) the client sent, `false` when it sent none.
  * @returns {Promise<object>} `{ port, requests, close() }`.
  */
 export async function startFakeProxmox(routes) {
@@ -24,7 +26,7 @@ export async function startFakeProxmox(routes) {
     const url = new URL(req.url, 'https://localhost');
     const path = url.pathname.replace(/^\/api2\/json/, '');
     const query = Object.fromEntries(url.searchParams.entries());
-    requests.push({ path, query, headers: req.headers });
+    requests.push({ path, query, headers: req.headers, servername: req.socket.servername });
 
     const route = routes[path];
     if (route === undefined) {
@@ -35,6 +37,10 @@ export async function startFakeProxmox(routes) {
 
     const answer =
       typeof route === 'function' ? route({ query, headers: req.headers }) : { data: route };
+    if (typeof answer.raw === 'function') {
+      answer.raw(res);
+      return;
+    }
     const status = answer.status ?? 200;
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Gladys Assistant **external integration** (Node 20+, ESM, zero runtime deps
+A Gladys Assistant **external integration** (Node 22+, ESM, zero runtime deps
 beyond `@gladysassistant/integration-sdk`) that reads one or two Proxmox VE
 clusters and publishes one Gladys device per node (last `vzdump` backup:
 timestamp, duration, status — plus the SMART verdict of its disks and one
@@ -139,9 +139,12 @@ it.
 - **Portability fallbacks are cached, not retried.** A node that answers `400`
   to `typefilter=vzdump` is remembered in `backups.js` and filtered client-side
   from then on; a node that answers `400` to `skipsmart` is remembered in
-  `disks.js` and read without it from then on. `/cluster/resources` answers are cached ~15 s so one poll round
-  of a 40-guest cluster is one request; `force: true` / `clearGuestsCache()`
-  bypass it for discovery and explicit refreshes.
+  `disks.js` and read without it from then on. `/cluster/resources` answers are
+  cached 50 s (below the shortest refresh interval) so one poll round of a
+  40-guest cluster is one request; `force: true` / `clearGuestsCache()` bypass
+  it for discovery and explicit refreshes. Node reads in progress are shared
+  (`readNodeState()`), and the backups widget reads the backups alone
+  (`readNodeBackup()`).
 - **Scene triggers fire once per TRANSITION, never per read.** `src/observe.js`
   remembers the last finished backup (upid), the failed disks and the guest
   states. The first read of a guest or a disk is a baseline (no event), so a

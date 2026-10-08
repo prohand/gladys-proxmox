@@ -25,8 +25,18 @@ import { SCENE_ACTION, WIDGET } from './src/capabilities.js';
 import { getBackupStatus, getGuestStatus, getSmartStatus, refreshForScene } from './src/scenes.js';
 import { backupsWidget, guestsWidget, nodeWidget, widgetAction } from './src/widgets.js';
 import { withPullDeadline } from './src/widgetDeadline.js';
+import { createStatusTracker } from './src/status.js';
 
 const gladys = new GladysIntegration();
+
+// A promise nobody awaits that rejects — a fire-and-forget SDK call, a timer
+// callback — would otherwise end the process (Node's default since v15), and
+// with it every device's refresh, over what is at worst one missed read. Log
+// it and keep running. Uncaught exceptions are deliberately left alone: the
+// state after one is unknown, and the supervisor restarts the container.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', reason);
+});
 
 // Current configuration (hot-reloaded through onConfigUpdated).
 let config = normalizeConfig();
@@ -40,35 +50,8 @@ let config = normalizeConfig();
 // per configured interval.
 const REFRESH_LOOP_MS = 60 * 1000;
 
-// Devices whose last read failed, and the status last written. The status used
-// to be written by initialize() alone: a Proxmox that booted after Gladys stayed
-// red for good once it answered again, and one that went down later stayed green.
-const failingDevices = new Map();
-let reportedConnected = null;
-
-/**
- * Keep the Configuration screen status in step with the reads, writing it only
- * when it changes.
- * @param {string} externalId - The device just read.
- * @param {Error|null} error - Why its read failed, or null when it worked.
- * @returns {Promise<void>} Resolves once Gladys stored the status, if it moved.
- */
-async function reportPollOutcome(externalId, error) {
-  if (error) {
-    failingDevices.set(externalId, error);
-  } else {
-    failingDevices.delete(externalId);
-  }
-  const connected = failingDevices.size === 0;
-  if (connected === reportedConnected) {
-    return;
-  }
-  reportedConnected = connected;
-  const [firstError] = failingDevices.values();
-  await gladys
-    .setConnectionStatus(connected, connected ? undefined : describeError(firstError))
-    .catch(() => {});
-}
+// The Configuration screen status, kept in step with the reads (src/status.js).
+const status = createStatusTracker(gladys);
 
 /**
  * Poll one device and report the outcome in the status.
@@ -79,10 +62,10 @@ async function reportPollOutcome(externalId, error) {
 async function pollAndReport(device, options) {
   try {
     if (await pollDevice(gladys, config, device, options)) {
-      await reportPollOutcome(device.external_id, null);
+      await status.report(device.external_id, null);
     }
   } catch (error) {
-    await reportPollOutcome(device.external_id, error);
+    await status.report(device.external_id, error);
     throw error;
   }
 }
@@ -154,6 +137,15 @@ gladys.onDeviceCreated(async (device) => {
   }
   logger.info(`onDeviceCreated -> first read of ${device?.external_id}`);
   await pollAndReport(device, { force: true });
+});
+
+// --- Device deleted by the user ----------------------------------------------
+// Nothing reads a deleted device again, so a failure it left behind would keep
+// the status red until the next reconnection: forget it.
+gladys.onDeviceDeleted(async (device) => {
+  if (device?.external_id) {
+    await status.forget(device.external_id);
+  }
 });
 
 // --- Manifest actions: buttons in the Configuration screen -------------------
@@ -240,10 +232,10 @@ async function initialize() {
     return;
   }
 
-  failingDevices.clear();
+  status.clear();
   try {
     const { failures } = await publishDevices();
-    reportedConnected = failures.length === 0;
+    status.written(failures.length === 0);
     if (failures.length === 0) {
       await gladys.setConnectionStatus(true);
       return;
@@ -255,7 +247,7 @@ async function initialize() {
       .catch(() => {});
   } catch (error) {
     logger.error('Initialization failed', error);
-    reportedConnected = false;
+    status.written(false);
     await gladys.setConnectionStatus(false, describeError(error)).catch(() => {});
   }
 }

@@ -6,6 +6,7 @@ import {
   normalizeFingerprint,
   ProxmoxError,
   resolveTlsMode,
+  tlsServername,
 } from '../src/proxmox/client.js';
 import { normalizeConfig } from '../src/config.js';
 import { startFakeProxmox } from './helpers/fakeProxmox.js';
@@ -66,6 +67,9 @@ test('a certificate that does not match the pin is refused', async () => {
       assert.equal(error.kind, 'tls');
       return true;
     });
+    // The pin is checked on the handshake, before anything is sent: the API
+    // token never reached the impostor.
+    assert.equal(server.requests.length, 0, 'no request reached the server');
   } finally {
     await server.close();
   }
@@ -191,6 +195,70 @@ test('empty query parameters are dropped from the URL', async () => {
   try {
     await get(configFor(server.port), '/nodes', { errors: 1, limit: 200, userfilter: '' });
     assert.deepEqual(server.requests[0].query, { errors: '1', limit: '200' });
+  } finally {
+    await server.close();
+  }
+});
+
+test('a host that trickles its answer is cut off by the total deadline', async () => {
+  let timer;
+  const server = await startFakeProxmox({
+    '/nodes': () => ({
+      raw(res) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        // A byte every 50 ms: the idle timeout never trips.
+        timer = setInterval(() => res.write(' '), 50);
+        res.on('close', () => clearInterval(timer));
+      },
+    }),
+  });
+  try {
+    const started = Date.now();
+    await assert.rejects(
+      get(configFor(server.port), '/nodes', {}, { idleTimeoutMs: 200, totalTimeoutMs: 600 }),
+      (error) => {
+        assert.ok(error instanceof ProxmoxError);
+        assert.equal(error.kind, 'timeout');
+        assert.match(error.message, /did not finish answering on \/nodes within 0.6 s/);
+        return true;
+      },
+    );
+    assert.ok(Date.now() - started < 5000);
+  } finally {
+    clearInterval(timer);
+    await server.close();
+  }
+});
+
+test('a silent host still trips the idle timeout', async () => {
+  const server = await startFakeProxmox({
+    '/nodes': () => ({ raw: () => {} }),
+  });
+  try {
+    await assert.rejects(
+      get(configFor(server.port), '/nodes', {}, { idleTimeoutMs: 200, totalTimeoutMs: 5000 }),
+      (error) => {
+        assert.equal(error.kind, 'timeout');
+        assert.match(error.message, /did not answer on \/nodes within 0.2 s/);
+        return true;
+      },
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('no TLS server name is sent for an IP address', async () => {
+  assert.equal(tlsServername('192.168.1.10'), undefined);
+  assert.equal(tlsServername('fe80::1'), undefined);
+  assert.equal(tlsServername('pve.lan'), 'pve.lan');
+
+  // On the wire: SNI only carries host names, and Node warns (DEP0123) when
+  // handed an IP address.
+  const server = await startFakeProxmox({ '/nodes': [] });
+  try {
+    await get(configFor(server.port), '/nodes');
+    assert.equal(server.requests[0].servername, false);
   } finally {
     await server.close();
   }

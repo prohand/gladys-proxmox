@@ -8,6 +8,9 @@
 //      a dashboard widget or a scene action asking for a node that was polled a
 //      minute ago reuses that read instead of hitting Proxmox again. An entry is
 //      only served while it is younger than the refresh interval the user chose.
+//      The disks carry their own age: the `backups` widget reads the backup
+//      alone (the disks cost a smartctl run per disk), and such a read must not
+//      pass the disks it did not read for fresh ones.
 //
 //   2. The TRANSITIONS the scene triggers stand for. A scene trigger is an
 //      event — "this happened" — never a state: one event per transition, never
@@ -35,7 +38,8 @@ import { formatBackupStatus, formatLastBackup, formatStatus, resolveTimezone } f
 
 const logger = createLogger({ name: 'observe' });
 
-// `<serverId>|<node>` -> { at, backup, disks }: the last read of each node.
+// `<serverId>|<node>` -> { at, backup, disksAt, disks }: the last read of each
+// node, `disksAt` being when its disks were last read (undefined: never).
 const nodeStates = new Map();
 // `<serverId>|<node>` -> upid of the last FINISHED backup seen on that node.
 const lastBackups = new Map();
@@ -89,11 +93,21 @@ export function clearSnapshot() {
  * @param {string} node - Node name.
  * @param {number} maxAgeSeconds - How old the read may be.
  * @param {number} [now] - Current time in milliseconds, injectable for the tests.
+ * @param {object} [options] - Options.
+ * @param {boolean} [options.backupOnly] - The caller only needs the backup: a
+ *   read that skipped the disks (or whose disks are older) is good enough.
  * @returns {{backup: object|null, disks: object[]|null}|null} The read, or null.
  */
-export function recentNodeState(server, node, maxAgeSeconds, now = Date.now()) {
+export function recentNodeState(
+  server,
+  node,
+  maxAgeSeconds,
+  now = Date.now(),
+  { backupOnly = false } = {},
+) {
   const entry = nodeStates.get(keyOf(server, node));
-  if (!entry || now - entry.at >= maxAgeSeconds * 1000) {
+  const fresh = (at) => at !== undefined && now - at < maxAgeSeconds * 1000;
+  if (!entry || !fresh(entry.at) || (!backupOnly && !fresh(entry.disksAt))) {
     return null;
   }
   return { backup: entry.backup, disks: entry.disks };
@@ -209,12 +223,23 @@ function diskEvents(server, node, deviceId, disks) {
  * @param {object} server - The server the node belongs to.
  * @param {string} node - Node name.
  * @param {string} deviceId - External id of the node device.
- * @param {{backup: object|null, disks: object[]|null}} state - What was read.
+ * @param {{backup: object|null, disks?: object[]|null}} state - What was read;
+ *   `disks` left undefined when the read skipped them (a backup-only read).
  * @param {number} [now] - Current time in milliseconds, injectable for the tests.
  * @returns {Promise<void>} Resolves once the events were tried.
  */
 export async function observeNode(gladys, server, node, deviceId, state, now = Date.now()) {
-  nodeStates.set(keyOf(server, node), { at: now, backup: state.backup, disks: state.disks });
+  const key = keyOf(server, node);
+  // A backup-only read keeps the disks of the previous read, with their own
+  // (older) age, rather than erasing them.
+  const previous = nodeStates.get(key);
+  const disksRead = state.disks !== undefined;
+  nodeStates.set(key, {
+    at: now,
+    backup: state.backup,
+    disks: disksRead ? state.disks : previous?.disks,
+    disksAt: disksRead ? now : previous?.disksAt,
+  });
   const events = [];
   const backup = backupEvent(server, node, deviceId, state.backup);
   if (backup) {

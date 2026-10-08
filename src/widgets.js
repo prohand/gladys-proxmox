@@ -19,6 +19,9 @@
 // refresh interval ago is served from that read (`readNode()`), so a dashboard
 // open all day costs Proxmox nothing more than the polls already do; Gladys, on
 // its side, caches the content for `ttl_seconds` — the refresh interval too.
+// A read still in progress is joined rather than started again, so a pull the
+// core repeats while Proxmox is slow costs nothing; the `backups` card reads the
+// backups alone (`readNodeBackup()`), never the disks it does not show.
 //
 // Each card carries a "Refresh" button: it reads Proxmox again right away and
 // publishes the states, exactly like the Configuration screen button.
@@ -28,7 +31,12 @@ import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
 import { WIDGET, WIDGET_ACTION } from './capabilities.js';
 import { describeError } from './actions.js';
 import { describeDevice, monitoredNodes, pollAllDevices, pollDevice } from './devices/index.js';
-import { FEATURE as NODE_FEATURE, nodeExternalIds, readNode } from './devices/proxmoxNode.js';
+import {
+  FEATURE as NODE_FEATURE,
+  nodeExternalIds,
+  readNode,
+  readNodeBackup,
+} from './devices/proxmoxNode.js';
 import { guestExternalIds } from './devices/proxmoxGuest.js';
 import { listNodes } from './proxmox/nodes.js';
 import { fetchGuests } from './proxmox/guests.js';
@@ -262,7 +270,8 @@ async function readBackups(gladys, server) {
   return Promise.all(
     nodes.map(async (node) => {
       try {
-        const { backup } = await readNode(gladys, server, node);
+        // The backup alone: this card shows nothing of the disks.
+        const { backup } = await readNodeBackup(gladys, server, node);
         return { server, node, backup };
       } catch (error) {
         return { server, node, error };
