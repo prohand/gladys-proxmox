@@ -243,3 +243,21 @@ test('the snapshot is served while younger than the refresh interval', async () 
   clearSnapshot();
   assert.equal(recentNodeState(SERVER, 'pve1', 300, at), null);
 });
+
+test('a backup-only read never passes its disks for fresh ones', async () => {
+  const gladys = createFakeGladys();
+  const at = T0 * 1000;
+  const disks = [{ devpath: '/dev/sda', healthy: true }];
+  await observeNode(gladys, SERVER, 'pve1', DEVICE, { backup: null, disks }, at);
+
+  // Ten minutes later, the backups widget reads the backup alone.
+  const later = at + 600_000;
+  const latest = backup('UPID:2', T0 - 10);
+  await observeNode(gladys, SERVER, 'pve1', DEVICE, { backup: latest }, later);
+
+  assert.deepEqual(recentNodeState(SERVER, 'pve1', 300, later, { backupOnly: true }), {
+    backup: latest,
+    disks,
+  });
+  assert.equal(recentNodeState(SERVER, 'pve1', 300, later), null, 'the disks are 10 min old');
+});

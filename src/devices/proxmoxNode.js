@@ -230,16 +230,57 @@ async function publishDiskTemperatures(gladys, ids, disks) {
   await gladys.publishStates(states);
 }
 
+// Reads of a node in progress, by what they read: a widget the core pulls again
+// while the first pull is still waiting on Proxmox (a cold cache, a slow
+// smartctl) joins that read instead of starting another one, like the guest list
+// does (`fetchGuests`). Keyed on the whole server object, so a read started
+// under a previous configuration is never handed to the new one.
+const readsInFlight = new Map();
+
+/**
+ * Run a read of a node, or join the same read already in progress.
+ * @param {string} kind - 'full' (backup and disks) or 'backup'.
+ * @param {object} server - The server the node belongs to.
+ * @param {string} node - Proxmox node name.
+ * @param {() => Promise<object>} read - Performs the read.
+ * @returns {Promise<object>} What the read returned.
+ */
+function sharedRead(kind, server, node, read) {
+  const key = `${kind}|${JSON.stringify(server)}|${node}`;
+  const inFlight = readsInFlight.get(key);
+  if (inFlight) {
+    return inFlight;
+  }
+  const promise = read().finally(() => {
+    readsInFlight.delete(key);
+  });
+  readsInFlight.set(key, promise);
+  return promise;
+}
+
+/**
+ * The full read of a node already in progress, if any.
+ * @param {object} server - The server the node belongs to.
+ * @param {string} node - Proxmox node name.
+ * @returns {Promise<object>|undefined} That read.
+ */
+function fullReadInFlight(server, node) {
+  return readsInFlight.get(`full|${JSON.stringify(server)}|${node}`);
+}
+
 /**
  * Read the last backup of one node, and its disks, straight from Proxmox.
+ * Concurrent calls for the same node share one read.
  * @param {object} server - The server the node belongs to.
  * @param {string} node - Proxmox node name.
  * @returns {Promise<{backup: object|null, disks: object[]|null}>} What was read.
  */
-export async function readNodeState(server, node) {
-  const backup = await fetchLastBackup(server, node);
-  const disks = await readDisks(server, node);
-  return { backup, disks };
+export function readNodeState(server, node) {
+  return sharedRead('full', server, node, async () => {
+    const backup = await fetchLastBackup(server, node);
+    const disks = await readDisks(server, node);
+    return { backup, disks };
+  });
 }
 
 /**
@@ -259,6 +300,36 @@ export async function readNode(gladys, server, node) {
   const state = await readNodeState(server, node);
   await observeNode(gladys, server, node, nodeExternalIds(gladys, server, node).device, state);
   return state;
+}
+
+/**
+ * The last backup of one node for a reader that needs nothing else — the
+ * `backups` widget. Same rules as `readNode()`, without the disks: those cost a
+ * smartctl run per disk, and the widget lists every node of every server.
+ * @param {object} gladys - The SDK instance.
+ * @param {object} server - The server the node belongs to.
+ * @param {string} node - Proxmox node name.
+ * @returns {Promise<{backup: object|null}>} The last backup.
+ */
+export async function readNodeBackup(gladys, server, node) {
+  if (!readsDisks(server)) {
+    // Nothing to skip: the full read IS the backup read, and it fills the
+    // snapshot the node widget and the scene actions use too.
+    return readNode(gladys, server, node);
+  }
+  const recent = recentNodeState(server, node, server.poll_frequency, Date.now(), {
+    backupOnly: true,
+  });
+  if (recent) {
+    return { backup: recent.backup };
+  }
+  // A poll already reading this node brings the backup along: wait for it.
+  const full = fullReadInFlight(server, node);
+  const state = full
+    ? await full
+    : { backup: await sharedRead('backup', server, node, () => fetchLastBackup(server, node)) };
+  await observeNode(gladys, server, node, nodeExternalIds(gladys, server, node).device, state);
+  return { backup: state.backup };
 }
 
 /**
