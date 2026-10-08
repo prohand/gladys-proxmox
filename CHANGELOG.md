@@ -6,9 +6,28 @@ All notable changes to this integration are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The backups widget reads the last backup of each node only, no longer the disks (one smartctl run per disk) it does not show, and a pull repeated while a node is still being read joins that read instead of starting another one.
+- Deleting a device whose last read failed no longer leaves the connection status red until the next reconnection.
+- A Proxmox host that sends its answer a few bytes at a time no longer hangs the refresh: every request is now bounded to 30 s in total, on top of the 15 s of silence already allowed.
+- No more `DEP0123` deprecation warning in the logs when the Proxmox host is given as an IP address.
+- One round of the refresh loop reads the guest list once, even when the nodes polled in the same round take a while.
+
+### Changed
+
+- Node 22 or later is required to run the integration outside its Docker image (the image already ships Node 24).
+
 ## [2.3.0] - 2026-10-07
 
-- Maintenance release, no functional change.
+### Added
+
+- A GitHub Release is published for every version, so the version link of the Supervision page leads somewhere.
+
+### Fixed
+
+- The connection status follows the reads: a Proxmox that answered only after Gladys started stayed red for good, and one that went down later stayed green.
+- A widget pull answers within 9 s: past that the card says it is loading while the read completes, instead of the core giving up at 15 s and leaving the card dead until the dashboard is reloaded.
 
 ## [2.2.0] - 2026-10-06
 
