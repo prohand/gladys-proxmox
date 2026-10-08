@@ -29,6 +29,15 @@ import { createStatusTracker } from './src/status.js';
 
 const gladys = new GladysIntegration();
 
+// A promise nobody awaits that rejects — a fire-and-forget SDK call, a timer
+// callback — would otherwise end the process (Node's default since v15), and
+// with it every device's refresh, over what is at worst one missed read. Log
+// it and keep running. Uncaught exceptions are deliberately left alone: the
+// state after one is unknown, and the supervisor restarts the container.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', reason);
+});
+
 // Current configuration (hot-reloaded through onConfigUpdated).
 let config = normalizeConfig();
 
