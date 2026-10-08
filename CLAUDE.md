@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Gladys Assistant **external integration** (Node 20+, ESM, zero runtime deps
+A Gladys Assistant **external integration** (Node 22+, ESM, zero runtime deps
 beyond `@gladysassistant/integration-sdk`) that reads one or two Proxmox VE
 clusters and publishes one Gladys device per node (last `vzdump` backup:
 timestamp, duration, status — plus the SMART verdict of its disks and one
