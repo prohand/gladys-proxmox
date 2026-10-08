@@ -16,6 +16,7 @@
 // -----------------------------------------------------------------------------
 
 import https from 'node:https';
+import net from 'node:net';
 import { createLogger } from '@gladysassistant/integration-sdk';
 
 const logger = createLogger({ name: 'proxmox-client' });
@@ -24,6 +25,10 @@ const logger = createLogger({ name: 'proxmox-client' });
 // this so a misconfigured host cannot balloon the container's memory.
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
+// The socket timeout above is an IDLE timeout: it re-arms on every byte, so a
+// host that trickles its answer a few bytes at a time never trips it, and the
+// poll waiting on that answer hung for good. This one bounds the whole request.
+const TOTAL_TIMEOUT_MS = 30_000;
 
 /**
  * An error raised while talking to the Proxmox API.
@@ -176,13 +181,35 @@ export function networkError(server, path, error) {
 }
 
 /**
+ * The TLS server name (SNI) to send for a host, if any.
+ *
+ * SNI only carries host NAMES (RFC 6066): passing an IP address — the usual way
+ * to point at a Proxmox node — makes Node print a DEP0123 deprecation warning,
+ * and a later Node may refuse it outright. Without it, Node sends no SNI for an
+ * IP, which is what the RFC asks for.
+ * @param {string} host - The configured host.
+ * @returns {string|undefined} The server name, or undefined for an IP address.
+ */
+export function tlsServername(host) {
+  return net.isIP(String(host ?? '')) === 0 ? host : undefined;
+}
+
+/**
  * Perform one authenticated GET on the Proxmox API and return its `data`.
  * @param {object} server - A configured server.
  * @param {string} path - API path below `/api2/json`, e.g. `/nodes`.
  * @param {Record<string, string|number>} [query] - Query string parameters.
+ * @param {object} [timeouts] - Injectable for the tests.
+ * @param {number} [timeouts.idleTimeoutMs] - Longest silence allowed.
+ * @param {number} [timeouts.totalTimeoutMs] - Longest whole request allowed.
  * @returns {Promise<unknown>} The `data` member of the Proxmox response.
  */
-export function get(server, path, query = {}) {
+export function get(
+  server,
+  path,
+  query = {},
+  { idleTimeoutMs = DEFAULT_TIMEOUT_MS, totalTimeoutMs = TOTAL_TIMEOUT_MS } = {},
+) {
   const tls = resolveTlsMode(server);
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -197,6 +224,7 @@ export function get(server, path, query = {}) {
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let deadline = null;
     /**
      * Reject once, ignoring the late events that follow a destroyed request.
      * @param {Error} error - The failure.
@@ -204,6 +232,7 @@ export function get(server, path, query = {}) {
     const fail = (error) => {
       if (!settled) {
         settled = true;
+        clearTimeout(deadline);
         reject(error);
       }
     };
@@ -218,7 +247,7 @@ export function get(server, path, query = {}) {
         // handshake, and a pooled socket would skip it on reuse. A poll every
         // few minutes has nothing to gain from keep-alive anyway.
         agent: false,
-        servername: server.host,
+        servername: tlsServername(server.host),
         // Pinning replaces the chain check: accept the handshake here, then
         // compare the certificate ourselves on `secureConnect` below.
         rejectUnauthorized: tls.mode === 'ca',
@@ -267,6 +296,7 @@ export function get(server, path, query = {}) {
             return;
           }
           settled = true;
+          clearTimeout(deadline);
           resolve(parsed?.data);
         });
         response.on('error', (error) =>
@@ -298,15 +328,25 @@ export function get(server, path, query = {}) {
       });
     }
 
-    request.setTimeout(DEFAULT_TIMEOUT_MS, () => {
+    request.setTimeout(idleTimeoutMs, () => {
       const error = new ProxmoxError(
         'timeout',
-        `Proxmox did not answer on ${path} within ${DEFAULT_TIMEOUT_MS / 1000} s.`,
+        `Proxmox did not answer on ${path} within ${idleTimeoutMs / 1000} s.`,
         { path },
       );
       fail(error);
       request.destroy(error);
     });
+
+    deadline = setTimeout(() => {
+      const error = new ProxmoxError(
+        'timeout',
+        `Proxmox did not finish answering on ${path} within ${totalTimeoutMs / 1000} s.`,
+        { path },
+      );
+      fail(error);
+      request.destroy(error);
+    }, totalTimeoutMs);
 
     request.on('error', (error) => {
       if (error instanceof ProxmoxError) {
