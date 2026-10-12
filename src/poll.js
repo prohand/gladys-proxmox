@@ -19,9 +19,11 @@
 //     avoid, and a skipped poll publishes nothing: the last known state stays.
 // -----------------------------------------------------------------------------
 
+import { DEVICE_POLL_FREQUENCIES } from '@gladysassistant/integration-sdk';
+
 // The values Gladys accepts on a discovered device, in milliseconds, ascending.
-// Mirrored from the core's `DEVICE_POLL_FREQUENCIES`.
-export const GLADYS_POLL_FREQUENCIES = [1000, 2000, 10000, 15000, 30000, 60000];
+// Taken from the SDK's `DEVICE_POLL_FREQUENCIES`, which mirrors the core's.
+export const GLADYS_POLL_FREQUENCIES = Object.values(DEVICE_POLL_FREQUENCIES).sort((a, b) => a - b);
 
 // Gladys ticks are not metronomes: one arriving a few seconds early must not
 // push the whole schedule to the next tick (a 300 s interval polled on a 60 s
