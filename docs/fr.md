@@ -446,8 +446,8 @@ Le résultat s'affiche en vert quand tout va bien, et en rouge dès que quelque
 chose demande votre attention (un serveur qui refuse, un nœud ou une liste de
 disques illisible, un appareil qui n'a pas pu être rafraîchi) — le rapport
 complet reste visible, y compris les serveurs qui ont bien répondu. Un résultat
-en rouge est écrit en anglais, en français, en allemand puis en espagnol, un
-paragraphe par langue : Gladys affiche une erreur sous la forme d'un seul texte.
+en rouge est écrit en anglais puis en français : Gladys affiche une erreur sous
+la forme d'un seul texte.
 
 ## Dépannage
 

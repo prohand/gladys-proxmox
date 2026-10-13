@@ -133,9 +133,9 @@ function messageContent(config, message) {
 }
 
 const NOT_CONFIGURED = {
-  en: 'Proxmox is not configured yet: fill in the host and the API token in the integration settings.',
+  en: 'Proxmox is not configured yet: fill in the host and the API token in the Configuration tab of the integration.',
   fr: "Proxmox n'est pas encore configuré : renseignez l'hôte et le jeton d'API dans les réglages de l'intégration.",
-  de: 'Proxmox ist noch nicht konfiguriert: Tragen Sie den Host und das API-Token in der Konfiguration der Integration ein.',
+  de: 'Proxmox ist noch nicht konfiguriert: Trage den Host und das API-Token in der Konfiguration der Integration ein.',
   es: 'Proxmox aún no está configurado: indique el host y el token de API en la configuración de la integración.',
 };
 
@@ -484,7 +484,7 @@ export async function guestsWidget(gladys, config, settings = {}) {
       text: {
         en: 'No VM/LXC is visible: grant VM.Audit on /vms to the API token.',
         fr: "Aucune VM/LXC visible : accordez VM.Audit sur /vms au jeton d'API.",
-        de: 'Keine VM/LXC sichtbar: Geben Sie dem API-Token VM.Audit auf /vms.',
+        de: 'Keine VM/LXC sichtbar: Gib dem API-Token VM.Audit auf /vms.',
         es: 'No hay ninguna VM/LXC visible: conceda VM.Audit en /vms al token de API.',
       },
     });
@@ -549,7 +549,7 @@ export async function nodeWidget(gladys, config, settings = {}, units = 'metric'
     return messageContent(config, {
       en: 'Pick a Proxmox node in the settings of this widget (not a VM/LXC).',
       fr: 'Choisissez un nœud Proxmox dans les réglages de ce widget (pas une VM/LXC).',
-      de: 'Wählen Sie in den Einstellungen dieses Widgets einen Proxmox-Knoten (keine VM/LXC).',
+      de: 'Wähle in den Einstellungen dieses Widgets einen Proxmox-Knoten (keine VM/LXC).',
       es: 'Elija un nodo Proxmox en la configuración de este widget (no una VM/LXC).',
     });
   }

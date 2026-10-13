@@ -812,11 +812,8 @@ async function failureOf(promise) {
     await promise;
   } catch (error) {
     assert.ok(error instanceof ActionFailure, error);
-    // What Gladys shows in red: one string, every language, English first.
-    assert.equal(
-      error.message,
-      ['en', 'fr', 'de', 'es'].map((lang) => error.localized[lang]).join('\n\n'),
-    );
+    // What Gladys shows in red: one string, English then French.
+    assert.equal(error.message, `${error.localized.en}\n\n${error.localized.fr}`);
     return error.localized;
   }
   assert.fail('the action should have failed (red), not resolved (green)');

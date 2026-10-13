@@ -34,9 +34,9 @@ test('every error message is written in every language', () => {
   }
 });
 
-test('a failed action carries one paragraph per language, English first', () => {
+test('a failed action carries English then French only, one paragraph each', () => {
   const failure = new ActionFailure({ en: 'Broken.', fr: 'Cassé.', de: 'Kaputt.', es: 'Roto.' });
-  assert.equal(failure.message, 'Broken.\n\nCassé.\n\nKaputt.\n\nRoto.');
-  // A language the message does not carry is skipped, never repeated in English.
-  assert.equal(new ActionFailure({ en: 'Broken.', fr: 'Cassé.' }).message, 'Broken.\n\nCassé.');
+  assert.equal(failure.message, 'Broken.\n\nCassé.');
+  // The other languages stay on the object, for whoever reads it as a message.
+  assert.equal(failure.localized.de, 'Kaputt.');
 });

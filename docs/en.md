@@ -282,7 +282,7 @@ failing, and a node whose disk list cannot be read at all reports `unknown`
 without ever costing that node its backup features.
 
 The temperature sensors are created when the node is discovered. Add or replace
-a disk, and it gets its own sensor at the next scan (Discovery tab, or a
+a disk, and it gets its own sensor at the next scan (Discover tab, or a
 configuration save).
 
 Gladys itself cannot ask for a refresh less often than once a minute, so the
@@ -290,7 +290,7 @@ integration holds the extra wait: it is called every minute and reads Proxmox
 only when the interval you set has elapsed. In between, nothing is published
 and the values already on the dashboard stay as they are.
 
-A device you have just added from the Discovery tab is the exception: it is read
+A device you have just added from the Discover tab is the exception: it is read
 right away rather than at the next tick, so it carries its backup — or its
 status — as soon as it appears, without you pressing _Refresh now_.
 
@@ -344,8 +344,8 @@ still running is not the last backup yet.
 
 ## Dashboard widgets (Gladys 5.1)
 
-Three cards can be added to a dashboard (_Edit the dashboard → Add a box →
-Proxmox_). They are drawn by Gladys itself, so they follow its theme, dark mode
+Three cards can be added to a dashboard (_Dashboard → Edit → New widget_, then
+the Proxmox cards under _Integration widgets_). They are drawn by Gladys itself, so they follow its theme, dark mode
 and language:
 
 - **Proxmox backups** — the number of nodes whose last backup is OK, failed, or
@@ -427,8 +427,8 @@ tells you which one to fix.
 The result shows in green when everything went fine, and in red as soon as
 something needs your attention (a server refused, a node or a disk list it could
 not read, a device it could not refresh) — the whole report stays visible, the
-servers that answered fine included. A red result is written in English, French,
-German, then Spanish, one paragraph each: Gladys shows an error as a single text.
+servers that answered fine included. A red result is written in English, then in
+French: Gladys shows an error as a single text.
 
 ## Troubleshooting
 
@@ -500,12 +500,12 @@ members, a USB enclosure. Disks behind a hardware RAID controller are not
 visible to Proxmox at all.
 
 **A disk has no temperature sensor** — it was added after the node was
-discovered: run a new scan from the Discovery tab, or save the configuration.
+discovered: run a new scan from the Discover tab, or save the configuration.
 A drive that reports no temperature at all (some SAS and USB drives) publishes
 nothing rather than a fake `0 °C`.
 
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host), with `LOG_LEVEL=debug` for the full
+The integration logs everything it does: check the integration's **Logs** tab
+in Gladys (or `docker logs` on the host), with `LOG_LEVEL=debug` for the full
 detail. The API token secret is never logged.
 
 ## Privacy and security

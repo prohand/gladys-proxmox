@@ -17,9 +17,11 @@
 // The Configuration screen has two colours for a result: green when the
 // handler resolves, red when it throws. So a problem must THROW (an
 // `ActionFailure`), or it reads like a success. A thrown error reaches Gladys
-// as a single string — never a `{ en, fr, de, es }` object — hence every
-// language in its message, one paragraph each (the result box keeps line
-// breaks), English first: a reader finds their own paragraph at a glance.
+// as a single string — never a `{ en, fr, de, es }` object — hence English
+// then French in its message, one paragraph each (the result box keeps line
+// breaks). Only those two, by choice: the thrown report stays English + French
+// as it always was, while everything returned (green results, statuses,
+// widgets) carries every language.
 // -----------------------------------------------------------------------------
 
 import { createLogger } from '@gladysassistant/integration-sdk';
@@ -30,14 +32,14 @@ import { listDisks, readsDisks } from './proxmox/disks.js';
 import { listServers } from './servers.js';
 import { pollAllDevices } from './devices/index.js';
 import { formatBackupSummary, resolveTimezone } from './format.js';
-import { LANGUAGES, inLanguage, perLanguage } from './i18n.js';
+import { inLanguage, perLanguage } from './i18n.js';
 
 const logger = createLogger({ name: 'actions' });
 
 const NOT_CONFIGURED = {
   en: 'Fill in the Proxmox host, the API token ID and its secret first, then save.',
   fr: "Renseignez d'abord l'hôte Proxmox, l'identifiant du jeton d'API et son secret, puis enregistrez.",
-  de: 'Tragen Sie zuerst den Proxmox-Host, die API-Token-ID und ihr Secret ein und speichern Sie dann.',
+  de: 'Trage zuerst den Proxmox-Host, die API-Token-ID und ihr Secret ein und speichere dann.',
   es: 'Indique primero el host de Proxmox, el ID del token de API y su secreto, y después guarde.',
 };
 
@@ -46,16 +48,11 @@ const NOT_CONFIGURED = {
  */
 export class ActionFailure extends Error {
   /**
-   * @param {{en: string, fr: string, de: string, es: string}} localized - The message.
+   * @param {{en: string, fr: string, de?: string, es?: string}} localized - The message;
+   *   only its English and French reach the red box.
    */
   constructor(localized) {
-    // A language a message does not carry is skipped, not filled with English:
-    // the English paragraph is already the first one.
-    super(
-      LANGUAGES.filter((lang) => localized[lang])
-        .map((lang) => localized[lang])
-        .join('\n\n'),
-    );
+    super(`${localized.en}\n\n${localized.fr}`);
     this.name = 'ActionFailure';
     this.localized = localized;
   }
@@ -73,14 +70,14 @@ export function describeError(error) {
       return {
         en: 'Proxmox refused the API token (401). Check the token ID (user@realm!name) and its secret.',
         fr: "Proxmox a refusé le jeton d'API (401). Vérifiez l'identifiant (utilisateur@realm!nom) et son secret.",
-        de: 'Proxmox hat das API-Token abgelehnt (401). Prüfen Sie die Token-ID (benutzer@realm!name) und ihr Secret.',
+        de: 'Proxmox hat das API-Token abgelehnt (401). Prüfe die Token-ID (benutzer@realm!name) und ihr Secret.',
         es: 'Proxmox ha rechazado el token de API (401). Compruebe el ID del token (usuario@realm!nombre) y su secreto.',
       };
     case 'permission':
       return {
         en: 'Proxmox refused the request (403): grant the token the PVEAuditor role on / (Sys.Audit on /nodes and VM.Audit on /vms).',
         fr: 'Proxmox a refusé la requête (403) : accordez au jeton le rôle PVEAuditor sur / (Sys.Audit sur /nodes et VM.Audit sur /vms).',
-        de: 'Proxmox hat die Anfrage abgelehnt (403): Geben Sie dem Token die Rolle PVEAuditor auf / (Sys.Audit auf /nodes und VM.Audit auf /vms).',
+        de: 'Proxmox hat die Anfrage abgelehnt (403): Gib dem Token die Rolle PVEAuditor auf / (Sys.Audit auf /nodes und VM.Audit auf /vms).',
         es: 'Proxmox ha rechazado la petición (403): asigne al token el rol PVEAuditor en / (Sys.Audit en /nodes y VM.Audit en /vms).',
       };
     case 'tls':
@@ -94,7 +91,7 @@ export function describeError(error) {
       return {
         en: 'Proxmox did not answer in time. Check the host, the port and the network.',
         fr: "Proxmox n'a pas répondu à temps. Vérifiez l'hôte, le port et le réseau.",
-        de: 'Proxmox hat nicht rechtzeitig geantwortet. Prüfen Sie den Host, den Port und das Netzwerk.',
+        de: 'Proxmox hat nicht rechtzeitig geantwortet. Prüfe den Host, den Port und das Netzwerk.',
         es: 'Proxmox no ha respondido a tiempo. Compruebe el host, el puerto y la red.',
       };
     case 'network':
@@ -184,7 +181,7 @@ async function describeGuestVisibility(server) {
         " Aucune VM ni LXC n'est visible : accordez VM.Audit (rôle PVEAuditor) sur /vms au jeton" +
         ' si ce cluster héberge bien des invités.',
       de:
-        ' Keine VM und kein LXC ist sichtbar: Geben Sie dem Token VM.Audit (Rolle PVEAuditor) auf /vms,' +
+        ' Keine VM und kein LXC ist sichtbar: Gib dem Token VM.Audit (Rolle PVEAuditor) auf /vms,' +
         ' falls dieser Cluster tatsächlich Gäste beherbergt.',
       es:
         ' No hay ninguna VM ni LXC visible: conceda VM.Audit (rol PVEAuditor) en /vms al token' +
@@ -272,7 +269,7 @@ async function testServer(server) {
       message: {
         en: 'Connected, but no node matched. Clear the "Nodes to monitor" field, or check the names you listed.',
         fr: 'Connexion réussie, mais aucun nœud ne correspond. Videz le champ « Nœuds à surveiller » ou vérifiez les noms saisis.',
-        de: 'Verbunden, aber kein Knoten passt. Leeren Sie das Feld „Zu überwachende Knoten“ oder prüfen Sie die eingetragenen Namen.',
+        de: 'Verbunden, aber kein Knoten passt. Leere das Feld „Zu überwachende Knoten“ oder prüfe die eingetragenen Namen.',
         es: 'Conectado, pero ningún nodo coincide. Vacíe el campo "Nodos que supervisar" o compruebe los nombres indicados.',
       },
     };
@@ -322,7 +319,7 @@ async function testServer(server) {
         ` Accordez Sys.Audit (rôle PVEAuditor) sur /nodes à ${server.token_id}.${grantedPart.fr}${guestsMessage.fr}${disksMessage.fr}`,
       de:
         `Verbunden, aber das Token kann das Aufgabenprotokoll folgender Knoten nicht lesen: ${denied.join(', ')}.` +
-        ` Geben Sie ${server.token_id} Sys.Audit (Rolle PVEAuditor) auf /nodes.${grantedPart.de}${guestsMessage.de}${disksMessage.de}`,
+        ` Gib ${server.token_id} Sys.Audit (Rolle PVEAuditor) auf /nodes.${grantedPart.de}${guestsMessage.de}${disksMessage.de}`,
       es:
         `Conectado, pero el token no puede leer el registro de tareas de: ${denied.join(', ')}.` +
         ` Conceda Sys.Audit (rol PVEAuditor) en /nodes a ${server.token_id}.${grantedPart.es}${guestsMessage.es}${disksMessage.es}`,
@@ -432,7 +429,7 @@ export async function refreshNow(gladys, config) {
     return {
       en: 'No device is being monitored yet. Run "Test the connection", then save the configuration.',
       fr: 'Aucun appareil surveillé pour le moment. Lancez « Tester la connexion », puis enregistrez la configuration.',
-      de: 'Noch wird kein Gerät überwacht. Führen Sie „Verbindung testen“ aus und speichern Sie dann die Konfiguration.',
+      de: 'Noch wird kein Gerät überwacht. Führe „Verbindung testen“ aus und speichere dann die Konfiguration.',
       es: 'Todavía no se supervisa ningún dispositivo. Ejecute "Probar la conexión" y después guarde la configuración.',
     };
   }

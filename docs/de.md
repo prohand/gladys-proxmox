@@ -1,6 +1,6 @@
 # Proxmox
 
-Überwachen Sie die **Backups** Ihrer Proxmox-VE-Knoten aus Gladys — wann das
+Überwache die **Backups** deiner Proxmox-VE-Knoten aus Gladys — wann das
 letzte lief, wie lange es dauerte und ob es erfolgreich war —, den
 **SMART-Zustand und die Temperatur ihrer Festplatten** sowie den
 **Betriebszustand jeder virtuellen Maschine und jedes LXC-Containers**.
@@ -9,19 +9,19 @@ Diese Integration ist **strikt schreibgeschützt**. Sie führt `GET`-Anfragen an
 die Proxmox-VE-API aus und sonst nichts — sie startet, stoppt, migriert, löscht
 oder konfiguriert niemals etwas.
 
-## Was Sie bekommen
+## Was du bekommst
 
 Nach der Installation erscheint pro Proxmox-Knoten ein Gladys-Gerät mit dem
 Namen `Proxmox <Knoten>`, das drei schreibgeschützte Funktionen zu seinem
 **letzten Backup** (einer Proxmox-Aufgabe `vzdump`) trägt:
 
-| Funktion            | Typ            | Inhalt                                                                                                                                                                     |
-| ------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Last backup**     | Text           | Wann das letzte Backup gestartet wurde, in Ihrer Zeitzone und im gewählten Datumsformat — z. B. `16/08/2026 11:25:04`. Enthält `unknown`, wenn der Knoten kein Backup hat. |
-| **Backup duration** | Ganzzahlsensor | Wie lange dieses Backup lief, in Sekunden. Wird im Verlauf gespeichert, sodass Sie es als Diagramm darstellen und Szenen darauf auslösen können.                           |
-| **Backup status**   | Text           | `OK` oder `failed — ` gefolgt von dem, was Proxmox gemeldet hat — z. B. `failed — command 'lvcreate' failed: exit code 5`.                                                 |
+| Funktion            | Typ            | Inhalt                                                                                                                                                                      |
+| ------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Last backup**     | Text           | Wann das letzte Backup gestartet wurde, in deiner Zeitzone und im gewählten Datumsformat — z. B. `16/08/2026 11:25:04`. Enthält `unknown`, wenn der Knoten kein Backup hat. |
+| **Backup duration** | Ganzzahlsensor | Wie lange dieses Backup lief, in Sekunden. Wird im Verlauf gespeichert, sodass du es als Diagramm darstellen und Szenen darauf auslösen kannst.                             |
+| **Backup status**   | Text           | `OK` oder `failed — ` gefolgt von dem, was Proxmox gemeldet hat — z. B. `failed — command 'lvcreate' failed: exit code 5`.                                                  |
 
-Sofern Sie die _Festplattenüberwachung_ nicht ausschalten, trägt dasselbe Gerät
+Sofern du die _Festplattenüberwachung_ nicht ausschaltest, trägt dasselbe Gerät
 auch den Zustand der **physischen Festplatten** dieses Knotens:
 
 | Funktion                      | Typ              | Inhalt                                                                                                                                                            |
@@ -39,14 +39,14 @@ Und ein Gladys-Gerät pro virtueller Maschine und pro LXC-Container mit dem Name
 **Warum Text und keine Ein/Aus-Sensoren?** Proxmox antwortet mit einem Wort oder
 mit einer ganzen Fehlerzeile, und eine binäre Funktion kann nur „nicht an“
 sagen: Eine pausierte VM las sich genau wie eine gestoppte, und ein
-fehlgeschlagenes Backup sagte nichts über das _Warum_ — Sie mussten das
+fehlgeschlagenes Backup sagte nichts über das _Warum_ — du musstest das
 Proxmox-Aufgabenprotokoll öffnen, um den vollen Datenspeicher zu finden. Die
 Textfunktionen tragen die Antwort selbst. Ein Schalter ist zudem die Form, die
 Gladys einem Aktor gibt, was diese schreibgeschützten Messwerte nie sind.
 
-Ob ein Backup als Erfolg gilt, legen weiterhin Sie fest: Mit der Voreinstellung
+Ob ein Backup als Erfolg gilt, legst weiterhin du fest: Mit der Voreinstellung
 _Nur OK_ veröffentlicht ein Lauf, der mit `WARNINGS: 2` endete,
-`failed — WARNINGS: 2`; stellen Sie _Was als erfolgreiches Backup gilt_ auf
+`failed — WARNINGS: 2`; stelle _Was als erfolgreiches Backup gilt_ auf
 _OK und Warnungen_, und derselbe Lauf veröffentlicht `OK`.
 
 Ein Knoten ohne Backup im Beobachtungszeitraum veröffentlicht `unknown` bei
@@ -60,13 +60,13 @@ behält seinen letzten bekannten Zustand, statt als gestoppt angezeigt zu werden
 Die naheliegende Nutzung in Gladys ist eine Szene, die auf diese Texte
 auslöst: _wenn „Backup status“ auf pve1 nicht „OK“ ist, benachrichtige mich_,
 oder _wenn „Status“ meiner NAS-VM nicht „running“ ist, benachrichtige mich_.
-**Backup duration** ist die Funktion mit Verlauf, also die, die Sie als
-Diagramm darstellen können.
+**Backup duration** ist die Funktion mit Verlauf, also die, die du als
+Diagramm darstellen kannst.
 
 ### Mehrere Backup-Jobs
 
-Proxmox wird **pro Knoten** gelesen, nicht pro Job. Wie viele Jobs Sie auch
-planen (die VMs um 02:00, die Container um 04:00, ein Job pro Speicher…), die
+Proxmox wird **pro Knoten** gelesen, nicht pro Job. Wie viele Jobs du auch
+planst (die VMs um 02:00, die Container um 04:00, ein Job pro Speicher…), die
 drei Funktionen beschreiben immer die **jüngste abgeschlossene
 `vzdump`-Aufgabe dieses Knotens**, egal welcher Job sie erzeugt hat. Ein Job,
 der Gäste auf mehreren Knoten umfasst, führt eine Aufgabe pro Knoten aus, sodass
@@ -81,12 +81,12 @@ _Änderung_ des Status auslöst — die hier empfohlene Form —, während ein e
 am Tag um 12 Uhr gelesener Wert nur den erfolgreichen Job sähe. Der
 fehlgeschlagene Lauf selbst verschwindet nie aus dem Proxmox-Aufgabenprotokoll.
 
-Ein Gerät pro Job gibt es derzeit nicht: Wenn Sie jeden Job einzeln verfolgen
-müssen, eröffnen Sie ein Issue dazu.
+Ein Gerät pro Job gibt es derzeit nicht: Wenn du jeden Job einzeln verfolgen
+musst, eröffne ein Issue dazu.
 
 ### Zwei Proxmox-Server
 
-Die Konfiguration hat **zwei identische Blöcke**: Füllen Sie den zweiten aus,
+Die Konfiguration hat **zwei identische Blöcke**: Fülle den zweiten aus,
 und die Integration überwacht einen zweiten, völlig unabhängigen Proxmox — mit
 eigenem Host, eigenem API-Token, eigenen TLS-Einstellungen und eigenem
 Knotenfilter. Alles Folgende (Berechtigungen, TLS, Aktionen) gilt für jeden der
@@ -95,10 +95,10 @@ beiden einzeln.
 Die Geräte des zweiten Servers tragen dessen eigene Bezeichnung, sodass nichts
 kollidiert: Ein Knoten namens `pve1` auf beiden Servern erscheint als
 **Proxmox pve1** und **Proxmox 2 pve1**, und eine VM 101 auf jedem erscheint
-ebenfalls zweimal. Setzen Sie _Name dieses Proxmox_ in einem der Blöcke, um sie
+ebenfalls zweimal. Setze _Name dieses Proxmox_ in einem der Blöcke, um sie
 selbst zu benennen (`Zuhause`, `Büro`…).
 
-Wenn Sie nur einen Proxmox haben, lassen Sie den zweiten Block leer, und nichts
+Wenn du nur einen Proxmox hast, lass den zweiten Block leer, und nichts
 ändert sich.
 
 ---
@@ -135,7 +135,7 @@ leere Liste ist. Ohne `VM.Audit` kommt die Gästeliste genauso leer zurück. Ein
 unterprivilegierte Einrichtung sieht also nicht kaputt aus: Die
 Backup-Funktionen bleiben einfach für immer `unknown`, und keine VM erscheint.
 Deshalb prüft die Schaltfläche **Verbindung testen** `/nodes/{node}/status`
-(das _sehr wohl_ `403` zurückgibt) und sagt Ihnen genau, welchen Knoten das
+(das _sehr wohl_ `403` zurückgibt) und sagt dir genau, welchen Knoten das
 Privileg fehlt und wie viele Gäste das Token tatsächlich sieht.
 
 † Nur aufgerufen, wenn die _Festplattenüberwachung_ eingeschaltet ist. Diese
@@ -156,13 +156,13 @@ In der Proxmox-Weboberfläche:
 
 1. **Datacenter → Permissions → Users → Add**
    - User name: `gladys`, Realm: `Proxmox VE authentication server (pve)`
-   - Legen Sie ein Passwort fest (die Integration verwendet es nie, aber Proxmox verlangt eines)
+   - Lege ein Passwort fest (die Integration verwendet es nie, aber Proxmox verlangt eines)
 2. **Datacenter → Permissions → Add → User Permission**
    - Path: `/` — User: `gladys@pve` — Role: `PVEAuditor` — Propagate: ✔
 3. **Datacenter → Permissions → API Tokens → Add**
    - User: `gladys@pve` — Token ID: `tasks`
    - **Privilege Separation: angehakt lassen** (siehe Hinweis unten)
-   - Proxmox zeigt das Secret jetzt **einmal** an — kopieren Sie es, es wird nie wieder angezeigt
+   - Proxmox zeigt das Secret jetzt **einmal** an — kopiere es, es wird nie wieder angezeigt
 4. **Datacenter → Permissions → Add → API Token Permission**
    - Path: `/` — API Token: `gladys@pve!tasks` — Role: `PVEAuditor` — Propagate: ✔
 
@@ -183,8 +183,8 @@ begrenzt.
 
 ### Option B — eine minimale eigene Rolle (geringste Rechte)
 
-Wenn Sie lieber nur das vergeben möchten, was tatsächlich genutzt wird, legen
-Sie eine Rolle an, die `Sys.Audit` und `VM.Audit` enthält und sonst nichts:
+Wenn du lieber nur das vergeben möchtest, was tatsächlich genutzt wird, lege
+eine Rolle an, die `Sys.Audit` und `VM.Audit` enthält und sonst nichts:
 
 ```bash
 pveum role add GladysBackupAudit --privs "Sys.Audit,VM.Audit"
@@ -210,17 +210,17 @@ benötigt: einige für den Benutzer, einige für das Token.
 
 Wird das Token mit `--privsep 0` erstellt, erbt es die Berechtigungen des
 Benutzers direkt und überspringt die Token-ACLs — das bedeutet aber auch, dass
-das Token für immer alles darf, was der Benutzer darf. Bevorzugen Sie die
+das Token für immer alles darf, was der Benutzer darf. Bevorzuge die
 Privilegientrennung.
 
 ### Überprüfen
 
-Verwenden Sie die Schaltfläche **Verbindung testen** im Tab „Konfiguration“ der
+Verwende die Schaltfläche **Verbindung testen** im Tab „Konfiguration“ der
 Integration. Sie meldet Knoten für Knoten, ob das Token das Aufgabenprotokoll
 tatsächlich lesen kann, wie viele VMs und Container es sieht, und nennt das
 fehlende Privileg, wenn etwas verweigert wird.
 
-Sie können auch von Hand prüfen:
+Du kannst auch von Hand prüfen:
 
 ```bash
 curl -sS --insecure \
@@ -246,7 +246,7 @@ beide.
 | **Proxmox-Host**                                   | ja      | —                             | IP oder Hostname eines beliebigen Knotens — ein Knoten antwortet für den ganzen Cluster. Auch eine eingefügte URL funktioniert, siehe unten. |
 | **API-Port**                                       | nein    | `8006`                        | Der Port der Proxmox-VE-API.                                                                                                                 |
 | **API-Token-ID**                                   | ja      | —                             | Die vollständige Form `user@realm!tokenname`, z. B. `gladys@pve!tasks`.                                                                      |
-| **API-Token-Secret**                               | ja      | —                             | Der Wert, den Proxmox einmal anzeigt. Von Gladys verschlüsselt gespeichert, nie an Ihren Browser zurückgesendet.                             |
+| **API-Token-Secret**                               | ja      | —                             | Der Wert, den Proxmox einmal anzeigt. Von Gladys verschlüsselt gespeichert, nie an deinen Browser zurückgesendet.                            |
 | **Fingerabdruck des TLS-Zertifikats**              | nein    | leer                          | SHA-256-Fingerabdruck des Knotenzertifikats. Siehe unten.                                                                                    |
 | **TLS-Zertifikat prüfen**                          | nein    | an                            | Eingeschaltet lassen. Siehe unten.                                                                                                           |
 | **Zu überwachende Knoten**                         | nein    | alle                          | Durch Kommas getrennte Knotennamen, z. B. `pve1, pve2`. Begrenzt auch die gemeldeten VMs/LXC.                                                |
@@ -258,7 +258,7 @@ beide.
 | **Aktualisierungsintervall**                       | nein    | `300` s                       | Wie oft Proxmox gelesen wird, zwischen 60 s und einer Stunde.                                                                                |
 
 _Proxmox-Host_ nimmt einen Hostnamen oder eine IP-Adresse, aber die Adresse, die
-Sie vor sich haben, ist die in Ihrem Browser — deshalb wird auch eine
+du vor dir hast, ist die in deinem Browser — deshalb wird auch eine
 eingefügte URL akzeptiert: `https://pve.lan:8006/#v1:0:18` wird als Host
 `pve.lan` auf Port `8006` gelesen. Das Schema, der Pfad und eventuelle
 Zugangsdaten werden verworfen, und der in der Adresse geschriebene Port hat
@@ -271,8 +271,8 @@ _Festplattenüberwachung_ und _Aktualisierungsintervall_ werden einmal
 eingestellt und gelten für jeden Server.
 
 Die Uhrzeit wird immer im 24-Stunden-Format angezeigt, und die Zeitzone wird
-auf der Kachel nicht wiederholt — Sie kennen die, in der Sie leben. Wählen Sie
-die letzte Option von _Datumsformat_, wenn Sie sie doch angezeigt haben möchten,
+auf der Kachel nicht wiederholt — du kennst die, in der du lebst. Wähle
+die letzte Option von _Datumsformat_, wenn du sie doch angezeigt haben möchtest,
 etwa wenn der Proxmox und die Person, die das Dashboard liest, nicht im selben
 Land sind.
 
@@ -290,38 +290,38 @@ Die _Festplattenüberwachung_ hat drei Einstellungen:
   ihre Backup-Funktionen.
 
 Beide Lesevorgänge benötigen `Sys.Audit` auf `/nodes`, genau wie die Backups —
-_Verbindung testen_ sagt Ihnen, wie viele Festplatten das Token lesen kann, und
+_Verbindung testen_ sagt dir, wie viele Festplatten das Token lesen kann, und
 nennt die Knoten, auf denen es das nicht kann. Eine Festplatte ohne
 SMART-Befund (ein Controller, den `smartctl` nicht kennt, ein USB-Gehäuse) wird
 gesondert gezählt, statt als fehlerhaft gemeldet zu werden, und ein Knoten,
 dessen Festplattenliste gar nicht gelesen werden kann, meldet `unknown`, ohne
 diesen Knoten jemals seine Backup-Funktionen zu kosten.
 
-Die Temperatursensoren werden bei der Erkennung des Knotens angelegt. Fügen Sie
-eine Festplatte hinzu oder ersetzen Sie eine, und sie erhält beim nächsten Scan
+Die Temperatursensoren werden bei der Erkennung des Knotens angelegt. Füge
+eine Festplatte hinzu oder ersetze eine, und sie erhält beim nächsten Scan
 ihren eigenen Sensor (Tab „Entdecken“ oder Speichern der Konfiguration).
 
 Gladys selbst kann eine Aktualisierung nicht seltener als einmal pro Minute
 anfordern, daher übernimmt die Integration das zusätzliche Warten: Sie wird
-jede Minute aufgerufen und liest Proxmox nur, wenn das von Ihnen eingestellte
+jede Minute aufgerufen und liest Proxmox nur, wenn das von dir eingestellte
 Intervall abgelaufen ist. Dazwischen wird nichts veröffentlicht, und die Werte,
 die bereits auf dem Dashboard stehen, bleiben, wie sie sind.
 
-Ein Gerät, das Sie gerade aus dem Tab „Entdecken“ hinzugefügt haben, ist die
+Ein Gerät, das du gerade aus dem Tab „Entdecken“ hinzugefügt hast, ist die
 Ausnahme: Es wird sofort gelesen statt beim nächsten Takt, sodass es sein
-Backup — oder seinen Status — trägt, sobald es erscheint, ohne dass Sie
-_Jetzt aktualisieren_ drücken.
+Backup — oder seinen Status — trägt, sobald es erscheint, ohne dass du
+_Jetzt aktualisieren_ drückst.
 
 ### TLS: das selbstsignierte Proxmox-Zertifikat
 
 Ab Werk liefert ein Proxmox-Knoten ein **selbstsigniertes** Zertifikat aus, dem
-kein Container vertraut. Sie haben drei Möglichkeiten, die beste zuerst:
+kein Container vertraut. Du hast drei Möglichkeiten, die beste zuerst:
 
-1. **Den Fingerabdruck pinnen (empfohlen).** Fügen Sie den
+1. **Den Fingerabdruck pinnen (empfohlen).** Füge den
    SHA-256-Fingerabdruck des Knotens in das Feld _Fingerabdruck des
    TLS-Zertifikats_ ein. Die Verbindung ist dann verschlüsselt _und_
    authentifiziert, ohne jede öffentliche Zertifizierungsstelle. Den
-   Fingerabdruck finden Sie in der Oberfläche unter **Node → System →
+   Fingerabdruck findest du in der Oberfläche unter **Node → System →
    Certificates → `pveproxy-ssl.pem`** oder in einer Shell:
 
    ```bash
@@ -333,18 +333,18 @@ kein Container vertraut. Sie haben drei Möglichkeiten, die beste zuerst:
    Jedes Format wird akzeptiert (`AA:BB:CC…`, `aabbcc…`, mit oder ohne
    Leerzeichen).
 
-   Beachten Sie, dass sich der Fingerabdruck ändert, wenn das Zertifikat
-   erneuert oder ersetzt wird — aktualisieren Sie dann das Feld oder wechseln
-   Sie zu Option 2.
+   Beachte, dass sich der Fingerabdruck ändert, wenn das Zertifikat
+   erneuert oder ersetzt wird — aktualisiere dann das Feld oder wechsle
+   zu Option 2.
 
 2. **Ein vertrauenswürdiges Zertifikat** auf dem Knoten installieren (Let's
-   Encrypt über die ACME-Unterstützung von Proxmox oder Ihre eigene CA im
-   Vertrauensspeicher des Containers). Lassen Sie beide TLS-Felder auf ihren
+   Encrypt über die ACME-Unterstützung von Proxmox oder deine eigene CA im
+   Vertrauensspeicher des Containers). Lass beide TLS-Felder auf ihren
    Standardwerten.
 
 3. **_TLS-Zertifikat prüfen_ ausschalten.** Letzter Ausweg, nur in einem
    vertrauenswürdigen LAN: Der Verkehr bleibt verschlüsselt, aber nichts
-   beweist, dass der Server, den Sie erreichen, wirklich Ihr Knoten ist — und
+   beweist, dass der Server, den du erreichst, wirklich dein Knoten ist — und
    das API-Token-Secret läuft über diese Verbindung.
 
 ### Was als erfolgreiches Backup gilt
@@ -360,15 +360,15 @@ Proxmox speichert ein abgeschlossenes Backup mit einem dieser Status, und
 | _(leer)_       | kein Exit-Status — Worker abgestürzt | `failed — no exit status (worker crashed?)` | `failed — no exit status (worker crashed?)` |
 
 Ein Backup, das abgeschlossen wurde, aber einen Gast übersprungen hat, endet mit
-`WARNINGS: n`. Wählen Sie _OK und Warnungen_, wenn Ihnen das genügt.
+`WARNINGS: n`. Wähle _OK und Warnungen_, wenn dir das genügt.
 
 Nur **abgeschlossene** Backups werden gelesen (die archivierte Aufgabenliste von
 Proxmox): Ein noch laufendes Backup ist noch nicht das letzte Backup.
 
 ## Dashboard-Widgets (Gladys 5.1)
 
-Drei Karten können einem Dashboard hinzugefügt werden (_Dashboard bearbeiten →
-Hinzufügen → Proxmox_). Sie werden von Gladys selbst gezeichnet und folgen
+Drei Karten können einem Dashboard hinzugefügt werden (_Dashboard → Bearbeiten →
+Neues Widget_, dann die Proxmox-Karten unter _Integrations-Widgets_). Sie werden von Gladys selbst gezeichnet und folgen
 daher seinem Design, dem Dunkelmodus und der Sprache:
 
 - **Proxmox-Backups** — die Anzahl der Knoten, deren letztes Backup OK,
@@ -421,7 +421,7 @@ wie der Rest dieser Integration.
 - **Proxmox aktualisieren** — liest jetzt jeden Knoten und jede VM/LXC und
   veröffentlicht die Zustände. Gibt der Szene `backups_ok`, `backups_failed`,
   `backups_unknown`, `guests_running`, `guests_not_running` und `errors`
-  (Anzahlen), die Sie in einer Bedingung prüfen können.
+  (Anzahlen), die du in einer Bedingung prüfen kannst.
 - **Letztes Proxmox-Backup abrufen** — für einen Knoten: `has_backup`,
   `success`, `status`, `last_backup`, `duration_seconds`. Praktisch für eine
   Zusammenfassung am Morgen.
@@ -434,7 +434,7 @@ wie der Rest dieser Integration.
   `running`, `name`, `node`.
 
 Der Knoten oder die VM/LXC wird unter den Geräten dieser Integration gewählt:
-Fügen Sie ihn zuerst aus dem Tab _Entdecken_ hinzu. Wählt man eine VM für ein
+Füge ihn zuerst aus dem Tab _Entdecken_ hinzu. Wählt man eine VM für ein
 Backup (oder einen Knoten für einen VM-Zustand), schlägt nur diese Aktion fehl,
 mit einer entsprechenden Meldung.
 
@@ -443,35 +443,35 @@ mit einer entsprechenden Meldung.
 - **Verbindung testen** — prüft, dass der Host antwortet, dass das API-Token
   akzeptiert wird, dass es das Aufgabenprotokoll jedes überwachten Knotens
   tatsächlich lesen kann, wie viele VMs/LXC es sieht und von wie vielen
-  Festplatten es die SMART-Daten lesen kann. Führen Sie dies zuerst aus, wann
+  Festplatten es die SMART-Daten lesen kann. Führe dies zuerst aus, wann
   immer etwas nicht stimmt.
 - **Jetzt aktualisieren** — liest die Backups, die Festplatten und die
   VM/LXC-Zustände sofort, statt auf die nächste Aktualisierung zu warten.
 
 Beide laufen auf jedem konfigurierten Server und stellen jedem Ergebnis
 `[<Name>]` voran, wenn es zwei gibt — eine Meldung wie
-`[Büro] Proxmox hat das API-Token abgelehnt (401)` sagt Ihnen also, welchen Sie
-korrigieren müssen.
+`[Büro] Proxmox hat das API-Token abgelehnt (401)` sagt dir also, welchen du
+korrigieren musst.
 
 Das Ergebnis wird grün angezeigt, wenn alles gut gegangen ist, und rot, sobald
-etwas Ihre Aufmerksamkeit erfordert (ein Server, der ablehnt, ein Knoten oder
+etwas deine Aufmerksamkeit erfordert (ein Server, der ablehnt, ein Knoten oder
 eine Festplattenliste, die nicht gelesen werden konnte, ein Gerät, das nicht
 aktualisiert werden konnte) — der gesamte Bericht bleibt sichtbar, auch die
-Server, die korrekt geantwortet haben. Ein rotes Ergebnis wird auf Englisch,
-Französisch, Deutsch und dann Spanisch geschrieben, ein Absatz pro Sprache:
-Gladys zeigt einen Fehler als einen einzigen Text an.
+Server, die korrekt geantwortet haben. Ein rotes Ergebnis wird auf Englisch und
+dann auf Französisch geschrieben: Gladys zeigt einen Fehler als einen einzigen
+Text an.
 
 ## Fehlerbehebung
 
 **„Proxmox hat das API-Token abgelehnt (401)“** — die Token-ID oder das Secret
 ist falsch. Die ID muss die _vollständige_ Form `user@realm!tokenname`
-(`gladys@pve!tasks`) sein, nicht nur der Tokenname. Wenn Sie das Secret
-verloren haben, löschen Sie das Token und erstellen Sie ein neues: Proxmox zeigt
+(`gladys@pve!tasks`) sein, nicht nur der Tokenname. Wenn du das Secret
+verloren hast, lösche das Token und erstelle ein neues: Proxmox zeigt
 es nur einmal an.
 
 **„das Token kann das Aufgabenprotokoll folgender Knoten nicht lesen: …“** —
-dem Token fehlt `Sys.Audit` auf diesen Knoten. Lesen Sie den Abschnitt zu den
-Berechtigungen oben noch einmal; denken Sie bei eingeschalteter
+dem Token fehlt `Sys.Audit` auf diesen Knoten. Lies den Abschnitt zu den
+Berechtigungen oben noch einmal; denk bei eingeschalteter
 Privilegientrennung daran, dass _sowohl_ der Benutzer als auch das Token die
 ACL benötigen.
 
@@ -480,72 +480,72 @@ ACL benötigen.
 unterprivilegiertes Token sieht also einfach nichts.
 
 **„Last backup“ bleibt `unknown`, obwohl die Proxmox-Oberfläche Backups zeigt**
-— entweder das oben genannte fehlende Privileg `Sys.Audit` (führen Sie
-**Verbindung testen** aus) oder ein Zeitfenster, das kürzer ist als Ihr
+— entweder das oben genannte fehlende Privileg `Sys.Audit` (führe
+**Verbindung testen** aus) oder ein Zeitfenster, das kürzer ist als dein
 Backup-Zeitplan: Ein Knoten, der alle zwei Wochen gesichert wird, meldet mit
-dem Standardfenster von 7 Tagen nichts. Erhöhen Sie _Wie weit zurück nach einem
+dem Standardfenster von 7 Tagen nichts. Erhöhe _Wie weit zurück nach einem
 Backup gesucht wird_.
 
 **„Backup status“ zeigt `failed — WARNINGS: 2`, obwohl das Backup in Ordnung
 aussieht** — das Backup endete mit Warnungen (ein Gast wurde übersprungen, ein
 Hook gab einen Wert ungleich null zurück…). Der Text nach `failed — ` sind die
-eigenen Worte von Proxmox: Öffnen Sie diese Aufgabe in der Proxmox-Oberfläche,
-um den Grund zu sehen, oder stellen Sie _Was als erfolgreiches Backup gilt_ auf
+eigenen Worte von Proxmox: Öffne diese Aufgabe in der Proxmox-Oberfläche,
+um den Grund zu sehen, oder stelle _Was als erfolgreiches Backup gilt_ auf
 _OK und Warnungen_, dann wird ein solcher Lauf als `OK` angezeigt.
 
-**Eine gelöschte VM ist noch aufgeführt** — das Gladys-Gerät bleibt, bis Sie es
-in Gladys löschen; die Integration veröffentlicht keine Zustände mehr dafür,
+**Eine gelöschte VM ist noch aufgeführt** — das Gladys-Gerät bleibt, bis du es
+in Gladys löschst; die Integration veröffentlicht keine Zustände mehr dafür,
 es friert also einfach auf seinem letzten Wert ein.
 
-**„Proxmox presents a self-signed certificate“** — pinnen Sie seinen
+**„Proxmox presents a self-signed certificate“** — pinne seinen
 Fingerabdruck, siehe den TLS-Abschnitt oben.
 
 **„Cannot resolve the host name …“** — der Name in _Proxmox-Host_ konnte nicht
-aufgelöst werden (`EAI_AGAIN`, `ENOTFOUND`). Prüfen Sie die Schreibweise und ob
+aufgelöst werden (`EAI_AGAIN`, `ENOTFOUND`). Prüfe die Schreibweise und ob
 die Maschine, auf der die Integration läuft, ihn auflöst — ein kurzer
 `.local`-/LAN-Name wird oft nur in dem Netzwerk aufgelöst, aus dem er stammt,
 während die IP-Adresse immer funktioniert.
 
 **„… refused the connection“** — der Host antwortet, aber auf diesem Port lauscht
-nichts: Prüfen Sie den _API-Port_ (standardmäßig `8006`).
+nichts: Prüfe den _API-Port_ (standardmäßig `8006`).
 
-**„Cannot reach …“** — prüfen Sie den Host und den Port (`8006`) und ob der
-Gladys-Container den Knoten in Ihrem Netzwerk erreichen kann. Bei zwei
+**„Cannot reach …“** — prüfe den Host und den Port (`8006`) und ob der
+Gladys-Container den Knoten in deinem Netzwerk erreichen kann. Bei zwei
 konfigurierten Servern nennt die Meldung den, der nicht geantwortet hat; der
 andere wird weiterhin normal aktualisiert.
 
 **Zwei Geräte mit demselben Namen** — beide Server verwenden dieselbe
-Bezeichnung. Setzen Sie _Name dieses Proxmox_ in mindestens einem Block. Eine
+Bezeichnung. Setze _Name dieses Proxmox_ in mindestens einem Block. Eine
 Umbenennung eines Servers ändert die Namen der Geräte, die er ab dann erkennt;
-Geräte, die Gladys bereits angelegt hat, behalten den Namen, den Sie in Gladys
-sehen, und können dort umbenannt werden.
+Geräte, die Gladys bereits angelegt hat, behalten den Namen, den du in Gladys
+siehst, und können dort umbenannt werden.
 
 **Die Geräte meines zweiten Servers sind vom Dashboard verschwunden** — das
 Leeren des zweiten Blocks beendet seine Überwachung, aber seine Gladys-Geräte
-bleiben, eingefroren auf ihrem letzten bekannten Wert, bis Sie sie in Gladys
-löschen.
+bleiben, eingefroren auf ihrem letzten bekannten Wert, bis du sie in Gladys
+löschst.
 
-**Zeitstempel weichen um ein paar Stunden ab** — tragen Sie im Feld _Zeitzone_
-Ihre IANA-Zone ein (`Europe/Paris`, `America/New_York`…). Bleibt es leer,
+**Zeitstempel weichen um ein paar Stunden ab** — trage im Feld _Zeitzone_
+deine IANA-Zone ein (`Europe/Paris`, `America/New_York`…). Bleibt es leer,
 verwendet die Integration die Zeitzone der Maschine, auf der Gladys läuft, die
 in einem Container oft UTC ist. _Datumsformat_ bestimmt, wie dieses Datum
 geschrieben wird und ob die Zone daneben angezeigt wird.
 
 **„SMART status“ bleibt `unknown`** — das Token kann
-`/nodes/{node}/disks/list` nicht lesen (führen Sie **Verbindung testen** aus:
+`/nodes/{node}/disks/list` nicht lesen (führe **Verbindung testen** aus:
 es nennt die Knoten), oder `smartctl` hat keinen Befund für diese Laufwerke —
 ein RAID-Controller, der seine Mitglieder verbirgt, ein USB-Gehäuse. Festplatten
 hinter einem Hardware-RAID-Controller sind für Proxmox überhaupt nicht
 sichtbar.
 
 **Eine Festplatte hat keinen Temperatursensor** — sie wurde nach der Erkennung
-des Knotens hinzugefügt: Starten Sie einen neuen Scan aus dem Tab „Entdecken“
-oder speichern Sie die Konfiguration. Ein Laufwerk, das überhaupt keine
+des Knotens hinzugefügt: Starte einen neuen Scan aus dem Tab „Entdecken“
+oder speichere die Konfiguration. Ein Laufwerk, das überhaupt keine
 Temperatur meldet (einige SAS- und USB-Laufwerke), veröffentlicht nichts statt
 eines falschen `0 °C`.
 
-Die Integration protokolliert alles, was sie tut: Sehen Sie sich die
-Protokolle der Integration in der Gladys-Oberfläche an (oder `docker logs` auf
+Die Integration protokolliert alles, was sie tut: Sieh dir den Tab
+**Protokolle** der Integration in Gladys an (oder `docker logs` auf
 dem Host), mit `LOG_LEVEL=debug` für alle Details. Das
 API-Token-Secret wird nie protokolliert.
 
@@ -556,5 +556,5 @@ API-Token-Secret wird nie protokolliert.
 - Das API-Token-Secret wird von Gladys verschlüsselt gespeichert, nie an den
   Browser zurückgegeben (es ist ein Konfigurationsfeld vom Typ `secret`) und
   nie in die Protokolle geschrieben.
-- Die Integration spricht mit nichts außer Ihrem Proxmox-Host: kein
+- Die Integration spricht mit nichts außer deinem Proxmox-Host: kein
   Cloud-Dienst, keine Telemetrie, keinerlei ausgehende Verbindung.

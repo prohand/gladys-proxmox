@@ -361,8 +361,8 @@ Proxmox): una copia aún en curso todavía no es la última copia.
 
 ## Widgets del panel (Gladys 5.1)
 
-Se pueden añadir tres tarjetas a un panel (_Editar panel → Agregar →
-Proxmox_). Las dibuja el propio Gladys, así que siguen su tema, su modo oscuro
+Se pueden añadir tres tarjetas a un panel (_Panel → Editar → Nuevo widget_,
+y luego las tarjetas de Proxmox en _Widgets de integraciones_). Las dibuja el propio Gladys, así que siguen su tema, su modo oscuro
 y su idioma:
 
 - **Copias de seguridad Proxmox**: el número de nodos cuya última copia está
@@ -447,8 +447,8 @@ El resultado se muestra en verde cuando todo ha ido bien, y en rojo en cuanto
 algo requiere su atención (un servidor que rechaza, un nodo o una lista de
 discos que no se pudo leer, un dispositivo que no se pudo actualizar); el
 informe completo sigue visible, incluidos los servidores que respondieron bien.
-Un resultado en rojo se escribe en inglés, francés, alemán y después español,
-un párrafo por idioma: Gladys muestra un error como un único texto.
+Un resultado en rojo se escribe en inglés y después en francés: Gladys muestra
+un error como un único texto.
 
 ## Solución de problemas
 
@@ -529,8 +529,8 @@ nodo: lance una nueva búsqueda desde la pestaña "Descubrir" o guarde la
 configuración. Una unidad que no informa de ninguna temperatura (algunas
 unidades SAS y USB) no publica nada en lugar de un falso `0 °C`.
 
-La integración registra todo lo que hace: consulte los registros de la
-integración desde la interfaz de Gladys (o `docker logs` en el host), con
+La integración registra todo lo que hace: consulte la pestaña **Registros** de la
+integración en Gladys (o `docker logs` en el host), con
 `LOG_LEVEL=debug` para el detalle completo. El secreto del token de API nunca
 se registra.
 

@@ -27,7 +27,7 @@
       "description": {
         "en": "This integration only READS Proxmox: the backup task log of the nodes, and the state of the VMs/LXC. Create a dedicated user, give it the built-in PVEAuditor role on / (Sys.Audit on /nodes and VM.Audit on /vms), then add an API token to that user. With privilege separation enabled, the token needs the same ACL as its user. Full step-by-step in the Documentation link below.",
         "fr": "Cette intégration LIT uniquement Proxmox : le journal des tâches de sauvegarde des nœuds, et l'état des VM/LXC. Créez un utilisateur dédié, donnez-lui le rôle intégré PVEAuditor sur / (Sys.Audit sur /nodes et VM.Audit sur /vms), puis ajoutez-lui un jeton d'API. Si la séparation de privilèges est activée, le jeton doit recevoir la même ACL que son utilisateur. Procédure détaillée dans le lien Documentation ci-dessous.",
-        "de": "Diese Integration LIEST Proxmox nur: das Backup-Aufgabenprotokoll der Knoten und den Zustand der VMs/LXC. Legen Sie einen eigenen Benutzer an, geben Sie ihm die integrierte Rolle PVEAuditor auf / (Sys.Audit auf /nodes und VM.Audit auf /vms) und fügen Sie diesem Benutzer dann ein API-Token hinzu. Bei aktivierter Privilegientrennung benötigt das Token dieselbe ACL wie sein Benutzer. Die vollständige Schritt-für-Schritt-Anleitung finden Sie unter dem Link „Dokumentation“ unten.",
+        "de": "Diese Integration LIEST Proxmox nur: das Backup-Aufgabenprotokoll der Knoten und den Zustand der VMs/LXC. Lege einen eigenen Benutzer an, gib ihm die integrierte Rolle PVEAuditor auf / (Sys.Audit auf /nodes und VM.Audit auf /vms) und füge diesem Benutzer dann ein API-Token hinzu. Bei aktivierter Privilegientrennung benötigt das Token dieselbe ACL wie sein Benutzer. Die vollständige Schritt-für-Schritt-Anleitung findest du unter dem Link „Dokumentation“ unten.",
         "es": "Esta integración solo LEE Proxmox: el registro de tareas de copia de seguridad de los nodos y el estado de las VM/LXC. Cree un usuario dedicado, asígnele el rol integrado PVEAuditor en / (Sys.Audit en /nodes y VM.Audit en /vms) y después añada un token de API a ese usuario. Con la separación de privilegios activada, el token necesita la misma ACL que su usuario. Encontrará el paso a paso completo en el enlace \"Documentación\" de abajo."
       },
       "links": [
@@ -169,7 +169,7 @@
       "description": {
         "en": "Recommended with the default self-signed Proxmox certificate: pin its SHA-256 fingerprint (Datacenter > Certificates > pveproxy-ssl.pem). Leave empty when the node serves a certificate signed by a public CA.",
         "fr": "Recommandé avec le certificat auto-signé Proxmox par défaut : épinglez son empreinte SHA-256 (Datacenter > Certificats > pveproxy-ssl.pem). Laissez vide si le nœud présente un certificat signé par une AC publique.",
-        "de": "Empfohlen beim standardmäßigen selbstsignierten Proxmox-Zertifikat: Pinnen Sie seinen SHA-256-Fingerabdruck (Datacenter > Zertifikate > pveproxy-ssl.pem). Leer lassen, wenn der Knoten ein von einer öffentlichen CA signiertes Zertifikat ausliefert.",
+        "de": "Empfohlen beim standardmäßigen selbstsignierten Proxmox-Zertifikat: Pinne seinen SHA-256-Fingerabdruck (Datacenter > Zertifikate > pveproxy-ssl.pem). Leer lassen, wenn der Knoten ein von einer öffentlichen CA signiertes Zertifikat ausliefert.",
         "es": "Recomendado con el certificado autofirmado predeterminado de Proxmox: fije su huella SHA-256 (Datacenter > Certificados > pveproxy-ssl.pem). Déjelo vacío si el nodo presenta un certificado firmado por una CA pública."
       },
       "placeholder": {
@@ -233,7 +233,7 @@
       "description": {
         "en": "Leave this block empty if you only have one Proxmox. Filled in, it monitors a second, fully independent server: its own host, its own API token and its own TLS settings, read the same way and needing the same PVEAuditor privileges. Its nodes and its VMs/LXC show up as their own Gladys devices, so a node called pve on both servers stays two distinct devices.",
         "fr": "Laissez ce bloc vide si vous n'avez qu'un seul Proxmox. Renseigné, il surveille un second serveur totalement indépendant : son propre hôte, son propre jeton d'API et ses propres réglages TLS, lus de la même façon et nécessitant les mêmes droits PVEAuditor. Ses nœuds et ses VM/LXC apparaissent comme des appareils Gladys distincts : un nœud nommé pve présent sur les deux serveurs reste deux appareils.",
-        "de": "Lassen Sie diesen Block leer, wenn Sie nur einen Proxmox haben. Ausgefüllt überwacht er einen zweiten, völlig unabhängigen Server: eigener Host, eigenes API-Token und eigene TLS-Einstellungen, auf dieselbe Weise gelesen und mit denselben PVEAuditor-Rechten. Seine Knoten und seine VMs/LXC erscheinen als eigene Gladys-Geräte, sodass ein Knoten namens pve auf beiden Servern zwei getrennte Geräte bleibt.",
+        "de": "Lass diesen Block leer, wenn du nur einen Proxmox hast. Ausgefüllt überwacht er einen zweiten, völlig unabhängigen Server: eigener Host, eigenes API-Token und eigene TLS-Einstellungen, auf dieselbe Weise gelesen und mit denselben PVEAuditor-Rechten. Seine Knoten und seine VMs/LXC erscheinen als eigene Gladys-Geräte, sodass ein Knoten namens pve auf beiden Servern zwei getrennte Geräte bleibt.",
         "es": "Deje este bloque vacío si solo tiene un Proxmox. Si lo rellena, supervisa un segundo servidor totalmente independiente: su propio host, su propio token de API y sus propios ajustes TLS, leído de la misma forma y con los mismos privilegios PVEAuditor. Sus nodos y sus VM/LXC aparecen como dispositivos de Gladys propios, de modo que un nodo llamado pve en ambos servidores sigue siendo dos dispositivos distintos."
       }
     },
@@ -272,7 +272,7 @@
       "description": {
         "en": "IP address or hostname of a node of the SECOND Proxmox VE installation. Leave empty if you only have one.",
         "fr": "Adresse IP ou nom d'hôte d'un nœud de la SECONDE installation Proxmox VE. Laissez vide si vous n'en avez qu'une.",
-        "de": "IP-Adresse oder Hostname eines Knotens der ZWEITEN Proxmox-VE-Installation. Leer lassen, wenn Sie nur eine haben.",
+        "de": "IP-Adresse oder Hostname eines Knotens der ZWEITEN Proxmox-VE-Installation. Leer lassen, wenn du nur eine hast.",
         "es": "Dirección IP o nombre de host de un nodo de la SEGUNDA instalación de Proxmox VE. Déjelo vacío si solo tiene una."
       },
       "placeholder": {
@@ -355,7 +355,7 @@
       "description": {
         "en": "Recommended with the default self-signed Proxmox certificate: pin its SHA-256 fingerprint (Datacenter > Certificates > pveproxy-ssl.pem). Leave empty when the node serves a certificate signed by a public CA.",
         "fr": "Recommandé avec le certificat auto-signé Proxmox par défaut : épinglez son empreinte SHA-256 (Datacenter > Certificats > pveproxy-ssl.pem). Laissez vide si le nœud présente un certificat signé par une AC publique.",
-        "de": "Empfohlen beim standardmäßigen selbstsignierten Proxmox-Zertifikat: Pinnen Sie seinen SHA-256-Fingerabdruck (Datacenter > Zertifikate > pveproxy-ssl.pem). Leer lassen, wenn der Knoten ein von einer öffentlichen CA signiertes Zertifikat ausliefert.",
+        "de": "Empfohlen beim standardmäßigen selbstsignierten Proxmox-Zertifikat: Pinne seinen SHA-256-Fingerabdruck (Datacenter > Zertifikate > pveproxy-ssl.pem). Leer lassen, wenn der Knoten ein von einer öffentlichen CA signiertes Zertifikat ausliefert.",
         "es": "Recomendado con el certificado autofirmado predeterminado de Proxmox: fije su huella SHA-256 (Datacenter > Certificados > pveproxy-ssl.pem). Déjelo vacío si el nodo presenta un certificado firmado por una CA pública."
       },
       "placeholder": {
@@ -435,7 +435,7 @@
       "description": {
         "en": "The last backup is looked for inside this window. A node with no backup in it reads \"unknown\" on \"Last backup\" and \"Backup status\", and publishes no duration at all. Raise it if your backup jobs run less often than that.",
         "fr": "La dernière sauvegarde est recherchée dans cette fenêtre. Un nœud sans sauvegarde dedans affiche « unknown » sur « Last backup » et « Backup status », et ne publie aucune durée. Augmentez-la si vos travaux de sauvegarde sont plus espacés.",
-        "de": "Das letzte Backup wird innerhalb dieses Zeitfensters gesucht. Ein Knoten ohne Backup darin zeigt „unknown“ bei „Last backup“ und „Backup status“ an und veröffentlicht überhaupt keine Dauer. Erhöhen Sie den Wert, wenn Ihre Backup-Jobs seltener laufen.",
+        "de": "Das letzte Backup wird innerhalb dieses Zeitfensters gesucht. Ein Knoten ohne Backup darin zeigt „unknown“ bei „Last backup“ und „Backup status“ an und veröffentlicht überhaupt keine Dauer. Erhöhe den Wert, wenn deine Backup-Jobs seltener laufen.",
         "es": "La última copia de seguridad se busca dentro de este periodo. Un nodo sin ninguna copia en él muestra \"unknown\" en \"Last backup\" y \"Backup status\", y no publica ninguna duración. Auméntelo si sus trabajos de copia se ejecutan con menos frecuencia."
       },
       "required": false,
@@ -455,7 +455,7 @@
       "description": {
         "en": "Proxmox marks a finished backup OK, WARNINGS: n (it completed but skipped something), or with an error string. Choose whether a backup that ended with warnings still reads \"OK\" on the \"Backup status\" feature, or \"failed — WARNINGS: n\".",
         "fr": "Proxmox marque une sauvegarde terminée OK, WARNINGS: n (terminée mais avec des éléments ignorés), ou avec un message d'erreur. Choisissez si une sauvegarde terminée avec des avertissements affiche quand même « OK » sur la fonctionnalité « Backup status », ou « failed — WARNINGS: n ».",
-        "de": "Proxmox markiert ein abgeschlossenes Backup mit OK, WARNINGS: n (abgeschlossen, aber etwas wurde übersprungen) oder mit einer Fehlermeldung. Wählen Sie, ob ein mit Warnungen beendetes Backup in der Funktion „Backup status“ weiterhin „OK“ anzeigt oder „failed — WARNINGS: n“.",
+        "de": "Proxmox markiert ein abgeschlossenes Backup mit OK, WARNINGS: n (abgeschlossen, aber etwas wurde übersprungen) oder mit einer Fehlermeldung. Wähle, ob ein mit Warnungen beendetes Backup in der Funktion „Backup status“ weiterhin „OK“ anzeigt oder „failed — WARNINGS: n“.",
         "es": "Proxmox marca una copia terminada como OK, WARNINGS: n (se completó pero omitió algo) o con un mensaje de error. Elija si una copia que terminó con advertencias sigue mostrando \"OK\" en la función \"Backup status\" o \"failed — WARNINGS: n\"."
       },
       "required": false,
@@ -516,7 +516,7 @@
       "description": {
         "en": "How the \"Last backup\" timestamp is written. The time is always shown on a 24-hour clock, in the time zone above — which is only printed on the tile if you pick the last option.",
         "fr": "Façon d'écrire l'horodatage « Last backup ». L'heure est toujours affichée sur 24 heures, dans le fuseau ci-dessus — qui n'est indiqué sur la tuile que si vous choisissez la dernière option.",
-        "de": "Wie der Zeitstempel „Last backup“ geschrieben wird. Die Uhrzeit wird immer im 24-Stunden-Format angezeigt, in der obigen Zeitzone — die nur dann auf der Kachel erscheint, wenn Sie die letzte Option wählen.",
+        "de": "Wie der Zeitstempel „Last backup“ geschrieben wird. Die Uhrzeit wird immer im 24-Stunden-Format angezeigt, in der obigen Zeitzone — die nur dann auf der Kachel erscheint, wenn du die letzte Option wählst.",
         "es": "Cómo se escribe la marca de tiempo de \"Last backup\". La hora se muestra siempre en formato de 24 horas, en la zona horaria de arriba, que solo aparece en el recuadro si elige la última opción."
       },
       "required": false,
@@ -572,7 +572,7 @@
       "description": {
         "en": "Adds a \"SMART status\" feature to every node, and one temperature sensor per physical disk. Reading the health costs one request per node; the temperatures cost one more per disk, each running a smartctl on the Proxmox side. Needs Sys.Audit on /nodes, like the backups. Add or replace a disk? Re-run a scan so its sensor appears.",
         "fr": "Ajoute une fonctionnalité « SMART status » à chaque nœud, et un capteur de température par disque physique. Lire la santé coûte une requête par nœud ; les températures une de plus par disque, chacune exécutant un smartctl côté Proxmox. Nécessite Sys.Audit sur /nodes, comme les sauvegardes. Disque ajouté ou remplacé ? Relancez une recherche pour voir son capteur.",
-        "de": "Fügt jedem Knoten eine Funktion „SMART status“ und pro physischer Festplatte einen Temperatursensor hinzu. Das Lesen des Zustands kostet eine Anfrage pro Knoten; die Temperaturen kosten eine weitere pro Festplatte, die jeweils ein smartctl auf der Proxmox-Seite ausführt. Erfordert Sys.Audit auf /nodes, wie die Backups. Festplatte hinzugefügt oder ersetzt? Starten Sie erneut einen Scan, damit ihr Sensor erscheint.",
+        "de": "Fügt jedem Knoten eine Funktion „SMART status“ und pro physischer Festplatte einen Temperatursensor hinzu. Das Lesen des Zustands kostet eine Anfrage pro Knoten; die Temperaturen kosten eine weitere pro Festplatte, die jeweils ein smartctl auf der Proxmox-Seite ausführt. Erfordert Sys.Audit auf /nodes, wie die Backups. Festplatte hinzugefügt oder ersetzt? Starte erneut einen Scan, damit ihr Sensor erscheint.",
         "es": "Añade una función \"SMART status\" a cada nodo y un sensor de temperatura por disco físico. Leer el estado cuesta una petición por nodo; las temperaturas cuestan una más por disco, y cada una ejecuta un smartctl en el lado de Proxmox. Requiere Sys.Audit en /nodes, como las copias de seguridad. ¿Ha añadido o sustituido un disco? Vuelva a lanzar una búsqueda para que aparezca su sensor."
       },
       "required": false,
@@ -760,7 +760,7 @@
           "description": {
             "en": "Pick a node device, not a VM/LXC.",
             "fr": "Choisissez un appareil nœud, pas une VM/LXC.",
-            "de": "Wählen Sie ein Knotengerät, keine VM/LXC.",
+            "de": "Wähle ein Knotengerät, keine VM/LXC.",
             "es": "Elija un dispositivo de nodo, no una VM/LXC."
           },
           "required": true

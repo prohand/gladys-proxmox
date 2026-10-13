@@ -227,7 +227,7 @@ async function initialize() {
       .setConnectionStatus(false, {
         en: 'Not configured yet: fill in the Proxmox host and the API token.',
         fr: "Pas encore configurée : renseignez l'hôte Proxmox et le jeton d'API.",
-        de: 'Noch nicht konfiguriert: Tragen Sie den Proxmox-Host und das API-Token ein.',
+        de: 'Noch nicht konfiguriert: Trage den Proxmox-Host und das API-Token ein.',
         es: 'Aún no configurada: indique el host de Proxmox y el token de API.',
       })
       .catch(() => {});
