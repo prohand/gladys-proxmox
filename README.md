@@ -128,7 +128,8 @@ no VM" forever. That is why the **Test the connection** action probes
 token can actually see.
 
 The full step-by-step (web UI and CLI, TLS, troubleshooting) is in
-[`docs/en.md`](docs/en.md) / [`docs/fr.md`](docs/fr.md) — Gladys re-hosts those
+[`docs/en.md`](docs/en.md) / [`docs/fr.md`](docs/fr.md) /
+[`docs/de.md`](docs/de.md) / [`docs/es.md`](docs/es.md) — Gladys re-hosts those
 and links them from the Configuration screen.
 
 ## TLS
@@ -172,10 +173,13 @@ dependencies** beyond the SDK.
 │  ├─ poll.js                        # the frequencies Gladys accepts, and the real interval
 │  ├─ format.js                      # timestamps in the user's zone and format, durations, summaries
 │  ├─ servers.js                     # the flat form -> the list of Proxmox servers, and id scoping
+│  ├─ i18n.js                        # the languages of every user-facing text (en, fr, de, es)
 │  └─ config.js                      # config defaults, normalization, bounds
 ├─ docs/
 │  ├─ en.md                          # user documentation (re-hosted by Gladys and
-│  └─ fr.md                          #   linked from the Configuration screen)
+│  ├─ fr.md                          #   linked from the Configuration screen),
+│  ├─ de.md                          #   in English, French, German
+│  └─ es.md                          #   and Spanish
 ├─ gladys-assistant-integration.json # manifest (name, config schema, actions, image…)
 ├─ Dockerfile                        # Node 24 Alpine, read-only rootfs ready
 └─ test/                             # node --test, incl. a real HTTPS fake Proxmox node

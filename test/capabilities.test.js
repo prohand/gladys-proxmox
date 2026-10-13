@@ -374,7 +374,12 @@ test('the node widget refuses a VM/LXC with a message, not an error', async () =
 test('the widget refresh button reads Proxmox again', async () => {
   await withCluster(async ({ gladys, config }) => {
     const toast = await widgetAction(gladys, config, 'backups', 'refresh');
-    assert.deepEqual(toast, { en: 'Proxmox read again.', fr: 'Proxmox relu.' });
+    assert.deepEqual(toast, {
+      en: 'Proxmox read again.',
+      fr: 'Proxmox relu.',
+      de: 'Proxmox neu gelesen.',
+      es: 'Proxmox leído de nuevo.',
+    });
     assert.ok(
       gladys.published.some((state) => state.device_feature_external_id.startsWith(NODE_2)),
     );

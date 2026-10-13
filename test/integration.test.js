@@ -803,16 +803,16 @@ test('a guest that vanished publishes nothing instead of a fake OFF', async () =
 });
 
 /**
- * Await an action that must fail, and return the bilingual message it failed with.
+ * Await an action that must fail, and return the message it failed with.
  * @param {Promise} promise - The action.
- * @returns {Promise<{en: string, fr: string}>} The message of its `ActionFailure`.
+ * @returns {Promise<{en: string, fr: string, de: string, es: string}>} The message of its `ActionFailure`.
  */
 async function failureOf(promise) {
   try {
     await promise;
   } catch (error) {
     assert.ok(error instanceof ActionFailure, error);
-    // What Gladys shows in red: one string, both languages.
+    // What Gladys shows in red: one string, English then French.
     assert.equal(error.message, `${error.localized.en}\n\n${error.localized.fr}`);
     return error.localized;
   }

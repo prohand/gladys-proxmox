@@ -13,11 +13,42 @@ import { DATE_FORMAT_VALUES } from '../src/format.js';
 import { SERVER_IDS, serverConfigKeys } from '../src/servers.js';
 import { BACKUP_RESULT, SCENE_ACTION, SCENE_TRIGGER, WIDGET } from '../src/capabilities.js';
 import { GUESTS_SHOW } from '../src/widgets.js';
+import { LANGUAGES } from '../src/i18n.js';
 
 const manifest = JSON.parse(
   await readFile(new URL('../gladys-assistant-integration.json', import.meta.url), 'utf8'),
 );
 const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+
+/**
+ * Whether a multi-language text carries every language the integration speaks.
+ * @param {object} text - A `{ en, fr, de, es }` object.
+ * @returns {boolean} True when no language is missing or empty.
+ */
+function speaksEveryLanguage(text) {
+  return LANGUAGES.every((lang) => typeof text?.[lang] === 'string' && text[lang].length > 0);
+}
+
+/**
+ * Every multi-language object of the manifest, with where it sits.
+ * @param {unknown} node - Where to look.
+ * @param {string} path - Its path, for the assertion messages.
+ * @returns {{path: string, text: object}[]} The texts.
+ */
+function multiLanguageTexts(node, path = 'manifest') {
+  if (Array.isArray(node)) {
+    return node.flatMap((child, index) => multiLanguageTexts(child, `${path}[${index}]`));
+  }
+  if (node && typeof node === 'object') {
+    if (typeof node.en === 'string') {
+      return [{ path, text: node }];
+    }
+    return Object.entries(node).flatMap(([key, child]) =>
+      multiLanguageTexts(child, `${path}.${key}`),
+    );
+  }
+  return [];
+}
 
 test('every manifest action has a registered handler', () => {
   for (const action of manifest.actions ?? []) {
@@ -72,7 +103,7 @@ test('every select offers exactly the values the code accepts', () => {
     assert.deepEqual([...values].sort(), [...accepted[field.key]].sort());
     assert.ok(values.includes(field.default), `the default of "${field.key}" must be an option`);
     for (const option of field.options) {
-      assert.ok(option.label?.en && option.label?.fr, 'every option stays bilingual');
+      assert.ok(speaksEveryLanguage(option.label), 'every option speaks every language');
     }
   }
 });
@@ -162,6 +193,34 @@ test('the manifest version matches the docker image tag', () => {
   );
 });
 
+test('every text of the manifest is written in every language', () => {
+  const texts = multiLanguageTexts(manifest);
+  assert.ok(texts.length > 100, 'the walk must find the texts');
+  for (const { path, text } of texts) {
+    assert.deepEqual(Object.keys(text), LANGUAGES, `${path} must hold exactly ${LANGUAGES}`);
+    assert.ok(speaksEveryLanguage(text), `${path} has an empty language`);
+  }
+});
+
+test('every language fits the store length limits', () => {
+  // The store schema checks each language on its own: a German label that runs
+  // longer than its English one is still refused.
+  const within = (text, min, max, path) => {
+    for (const lang of LANGUAGES) {
+      const { length } = text[lang];
+      assert.ok(length >= min && length <= max, `${path}.${lang} is ${length} characters`);
+    }
+  };
+  within(manifest.description, 10, 100, 'description');
+  for (const widget of manifest.widgets) {
+    within(widget.label, 3, 30, `widgets.${widget.key}.label`);
+    within(widget.description, 1, 100, `widgets.${widget.key}.description`);
+  }
+  for (const section of manifest.config_schema.filter((field) => field.type === 'section')) {
+    within(section.description, 1, 1000, `config_schema.${section.key}.description`);
+  }
+});
+
 test('the store description stays under the 100 character cap', () => {
   // The store schema rejects a longer one (`manifest.description.*: must NOT
   // have more than 100 characters`), and the indexer is the only place that
@@ -213,11 +272,11 @@ test('every widget and every scene action has a registered handler', () => {
   }
 });
 
-test('the capability declarations stay bilingual', () => {
+test('the capability declarations speak every language', () => {
   const declarations = [...manifest.widgets, ...manifest.scene_triggers, ...manifest.scene_actions];
   for (const declaration of declarations) {
-    assert.ok(declaration.label?.en && declaration.label?.fr, `${declaration.key}.label`);
-    assert.ok(declaration.description?.en && declaration.description?.fr, declaration.key);
+    assert.ok(speaksEveryLanguage(declaration.label), `${declaration.key}.label`);
+    assert.ok(speaksEveryLanguage(declaration.description), declaration.key);
     const fields = [
       ...(declaration.settings ?? []),
       ...(declaration.fields ?? []),
@@ -225,9 +284,9 @@ test('the capability declarations stay bilingual', () => {
       ...(declaration.outputs ?? []),
     ];
     for (const field of fields) {
-      assert.ok(field.label?.en && field.label?.fr, `${declaration.key}.${field.key}.label`);
+      assert.ok(speaksEveryLanguage(field.label), `${declaration.key}.${field.key}.label`);
       for (const option of field.options ?? []) {
-        assert.ok(option.label?.en && option.label?.fr, `${declaration.key}.${field.key}`);
+        assert.ok(speaksEveryLanguage(option.label), `${declaration.key}.${field.key}`);
       }
     }
   }

@@ -162,12 +162,16 @@ it.
   components (1 focal, 6 tiles, 1 status list, 2 texts).
 - **A failed action THROWS.** The Configuration screen shows a resolved result
   in green and a thrown one in red — nothing in between. `test_connection` /
-  `refresh_now` throw an `ActionFailure` (full report, both languages in one
-  string: a thrown error reaches Gladys as text, never as `{ en, fr }`) as soon
-  as anything needs the user's attention; only an all-clear resolves.
-- **User-facing strings are bilingual** `{ en, fr }` objects — connection status
-  messages, action results, manifest labels. Keep both, and mirror any manifest
-  change in `docs/en.md` _and_ `docs/fr.md`.
+  `refresh_now` throw an `ActionFailure` (full report, English then French in
+  one string, one paragraph each: a thrown error reaches Gladys as text, never
+  as `{ en, fr, de, es }`, and the user chose to keep that red box to English +
+  French) as soon as anything needs the user's attention; only an all-clear
+  resolves.
+- **User-facing strings are** `{ en, fr, de, es }` objects (`src/i18n.js`) —
+  connection status messages, action results, widget texts, manifest labels.
+  Keep all four, and keep `docs/en.md`, `docs/fr.md`, `docs/de.md` and
+  `docs/es.md` in sync with any manifest or behaviour change. Device feature
+  names and their text states stay English.
 
 ## The manifest is a contract
 

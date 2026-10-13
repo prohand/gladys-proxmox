@@ -12,7 +12,7 @@
 // Gladys renders the content itself, from a small declarative vocabulary (text,
 // value tiles, a status list, a chart, buttons): no HTML, and the same theme,
 // dark mode and translations as its own widgets. Every text below is therefore
-// an `{ en, fr }` pair, and every one is cut to the length Gladys allows — a
+// an `{ en, fr, de, es }` object, and every one is cut to the length Gladys allows — a
 // text Gladys would have to truncate is cut here, with an ellipsis, instead.
 //
 // The data comes from the same readers as the polls. A node read less than one
@@ -49,6 +49,7 @@ import {
   formatSmartStatus,
   resolveTimezone,
 } from './format.js';
+import { colon, inLanguage, perLanguage } from './i18n.js';
 
 // What Gladys keeps of each text, in characters (the widget vocabulary bounds).
 const MAX = {
@@ -81,7 +82,7 @@ export const GUESTS_SHOW = {
 
 /**
  * Cut a text to the length Gladys keeps, with an ellipsis.
- * @param {string|object} text - A string, or an `{ en, fr }` pair.
+ * @param {string|object} text - A string, or an `{ en, fr, de, es }` object.
  * @param {number} max - The bound, in characters.
  * @returns {string|object} The same shape, cut.
  */
@@ -111,7 +112,7 @@ function ttlOf(config) {
 function refreshButton() {
   return {
     type: 'button',
-    label: { en: 'Refresh', fr: 'Rafraîchir' },
+    label: { en: 'Refresh', fr: 'Rafraîchir', de: 'Aktualisieren', es: 'Actualizar' },
     icon: 'refresh-cw',
     style: 'secondary',
     action: { key: WIDGET_ACTION.REFRESH },
@@ -121,7 +122,7 @@ function refreshButton() {
 /**
  * A content with a single message in it — nothing configured, nothing to show.
  * @param {object} config - Normalized configuration.
- * @param {{en: string, fr: string}} message - The message.
+ * @param {{en: string, fr: string, de: string, es: string}} message - The message.
  * @returns {object} The content.
  */
 function messageContent(config, message) {
@@ -132,8 +133,10 @@ function messageContent(config, message) {
 }
 
 const NOT_CONFIGURED = {
-  en: 'Proxmox is not configured yet: fill in the host and the API token in the integration settings.',
+  en: 'Proxmox is not configured yet: fill in the host and the API token in the Configuration tab of the integration.',
   fr: "Proxmox n'est pas encore configuré : renseignez l'hôte et le jeton d'API dans les réglages de l'intégration.",
+  de: 'Proxmox ist noch nicht konfiguriert: Trage den Host und das API-Token in der Konfiguration der Integration ein.',
+  es: 'Proxmox aún no está configurado: indique el host y el token de API en la configuración de la integración.',
 };
 
 /**
@@ -152,26 +155,31 @@ function rowLabel(server, text, named) {
  * @param {object} server - The server.
  * @param {Error} error - The failure.
  * @param {boolean} named - Whether the label must be shown.
- * @returns {{en: string, fr: string}} The message.
+ * @returns {{en: string, fr: string, de: string, es: string}} The message.
  */
 function serverProblem(server, error, named) {
   const message = describeError(error);
   if (!named) {
     return message;
   }
-  return { en: `${server.label}: ${message.en}`, fr: `${server.label} : ${message.fr}` };
+  return perLanguage((lang) => `${server.label}${colon(lang)}${inLanguage(message, lang)}`);
 }
 
 /**
  * The caption listing what could not be read, and what did not fit.
- * @param {{en: string, fr: string}[]} problems - One message per failed server.
+ * @param {{en: string, fr: string, de: string, es: string}[]} problems - One message per failed server.
  * @param {number} hidden - Rows left out of the status list.
  * @returns {object|null} A `text` component, or null when there is nothing to say.
  */
 function footnote(problems, hidden) {
   const parts = [...problems];
   if (hidden > 0) {
-    parts.push({ en: `+${hidden} more`, fr: `+${hidden} de plus` });
+    parts.push({
+      en: `+${hidden} more`,
+      fr: `+${hidden} de plus`,
+      de: `+${hidden} weitere`,
+      es: `+${hidden} más`,
+    });
   }
   if (parts.length === 0) {
     return null;
@@ -180,10 +188,7 @@ function footnote(problems, hidden) {
     type: 'text',
     variant: 'caption',
     text: clip(
-      {
-        en: parts.map((part) => part.en).join(' '),
-        fr: parts.map((part) => part.fr).join(' '),
-      },
+      perLanguage((lang) => parts.map((part) => inLanguage(part, lang)).join(' ')),
       MAX.CAPTION,
     ),
   };
@@ -191,7 +196,7 @@ function footnote(problems, hidden) {
 
 /**
  * A count tile.
- * @param {{en: string, fr: string}} label - The tile label.
+ * @param {{en: string, fr: string, de: string, es: string}} label - The tile label.
  * @param {number} value - The count.
  * @param {string} color - A `WIDGET_COLORS` value.
  * @returns {object} A `value` component.
@@ -217,24 +222,41 @@ function backupCard(entry, named) {
   if (error) {
     return {
       title,
-      badge: { text: { en: 'Read failed', fr: 'Illisible' }, color: WIDGET_COLORS.DANGER },
+      badge: {
+        text: { en: 'Read failed', fr: 'Illisible', de: 'Lesefehler', es: 'Error de lectura' },
+        color: WIDGET_COLORS.DANGER,
+      },
     };
   }
   if (!backup) {
     const days = server.backup_lookback_days;
     return {
       title,
-      subtitle: { en: `No backup in ${days} d`, fr: `Aucune sauvegarde sur ${days} j` },
-      badge: { text: { en: 'None', fr: 'Aucune' }, color: WIDGET_COLORS.WARNING },
+      subtitle: {
+        en: `No backup in ${days} d`,
+        fr: `Aucune sauvegarde sur ${days} j`,
+        de: `Kein Backup in ${days} T.`,
+        es: `Sin copia de seguridad en ${days} d`,
+      },
+      badge: {
+        text: { en: 'None', fr: 'Aucune', de: 'Keins', es: 'Ninguna' },
+        color: WIDGET_COLORS.WARNING,
+      },
     };
   }
   const card = { title, date: new Date(backup.starttime * 1000).toISOString() };
   if (!backup.success) {
     // The reason Proxmox gave, where the capture has nothing: worth the line.
     card.subtitle = clip(formatBackupStatus(backup), MAX.CARD_SUBTITLE);
-    card.badge = { text: { en: 'Failed', fr: 'Échec' }, color: WIDGET_COLORS.DANGER };
+    card.badge = {
+      text: { en: 'Failed', fr: 'Échec', de: 'Fehlgeschlagen', es: 'Fallida' },
+      color: WIDGET_COLORS.DANGER,
+    };
   } else {
-    card.badge = { text: { en: 'Succeeded', fr: 'Réussie' }, color: WIDGET_COLORS.SUCCESS };
+    card.badge = {
+      text: { en: 'Succeeded', fr: 'Réussie', de: 'Erfolgreich', es: 'Correcta' },
+      color: WIDGET_COLORS.SUCCESS,
+    };
   }
   return card;
 }
@@ -317,14 +339,18 @@ export async function backupsWidget(gladys, config) {
   );
 
   const components = [
-    countTile({ en: 'Backups OK', fr: 'Sauvegardes OK' }, count('ok'), WIDGET_COLORS.SUCCESS),
     countTile(
-      { en: 'Failed', fr: 'En échec' },
+      { en: 'Backups OK', fr: 'Sauvegardes OK', de: 'Backups OK', es: 'Copias OK' },
+      count('ok'),
+      WIDGET_COLORS.SUCCESS,
+    ),
+    countTile(
+      { en: 'Failed', fr: 'En échec', de: 'Fehlgeschlagen', es: 'Fallidas' },
       failed,
       failed > 0 ? WIDGET_COLORS.DANGER : WIDGET_COLORS.NEUTRAL,
     ),
     countTile(
-      { en: 'No backup', fr: 'Sans sauvegarde' },
+      { en: 'No backup', fr: 'Sans sauvegarde', de: 'Ohne Backup', es: 'Sin copia' },
       none,
       none > 0 ? WIDGET_COLORS.WARNING : WIDGET_COLORS.NEUTRAL,
     ),
@@ -396,12 +422,26 @@ export async function guestsWidget(gladys, config, settings = {}) {
   const other = entries.length - running - stopped;
 
   const components = [
-    countTile({ en: 'Running', fr: 'En marche' }, running, WIDGET_COLORS.SUCCESS),
-    countTile({ en: 'Stopped', fr: 'Arrêtées' }, stopped, WIDGET_COLORS.NEUTRAL),
+    countTile(
+      { en: 'Running', fr: 'En marche', de: 'Laufend', es: 'En ejecución' },
+      running,
+      WIDGET_COLORS.SUCCESS,
+    ),
+    countTile(
+      { en: 'Stopped', fr: 'Arrêtées', de: 'Gestoppt', es: 'Detenidas' },
+      stopped,
+      WIDGET_COLORS.NEUTRAL,
+    ),
   ];
   if (other > 0) {
     // paused, suspended, unknown...: rare, and worth a look when it happens.
-    components.push(countTile({ en: 'Other', fr: 'Autre' }, other, WIDGET_COLORS.WARNING));
+    components.push(
+      countTile(
+        { en: 'Other', fr: 'Autre', de: 'Andere', es: 'Otras' },
+        other,
+        WIDGET_COLORS.WARNING,
+      ),
+    );
   }
 
   const shown = entries
@@ -430,7 +470,12 @@ export async function guestsWidget(gladys, config, settings = {}) {
     components.push({
       type: 'text',
       variant: 'body',
-      text: { en: 'Every VM/LXC is running.', fr: 'Toutes les VM/LXC sont en marche.' },
+      text: {
+        en: 'Every VM/LXC is running.',
+        fr: 'Toutes les VM/LXC sont en marche.',
+        de: 'Alle VMs/LXC laufen.',
+        es: 'Todas las VM/LXC están en ejecución.',
+      },
     });
   } else if (problems.length === 0) {
     components.push({
@@ -439,6 +484,8 @@ export async function guestsWidget(gladys, config, settings = {}) {
       text: {
         en: 'No VM/LXC is visible: grant VM.Audit on /vms to the API token.',
         fr: "Aucune VM/LXC visible : accordez VM.Audit sur /vms au jeton d'API.",
+        de: 'Keine VM/LXC sichtbar: Gib dem API-Token VM.Audit auf /vms.',
+        es: 'No hay ninguna VM/LXC visible: conceda VM.Audit en /vms al token de API.',
       },
     });
   }
@@ -502,6 +549,8 @@ export async function nodeWidget(gladys, config, settings = {}, units = 'metric'
     return messageContent(config, {
       en: 'Pick a Proxmox node in the settings of this widget (not a VM/LXC).',
       fr: 'Choisissez un nœud Proxmox dans les réglages de ce widget (pas une VM/LXC).',
+      de: 'Wähle in den Einstellungen dieses Widgets einen Proxmox-Knoten (keine VM/LXC).',
+      es: 'Elija un nodo Proxmox en la configuración de este widget (no una VM/LXC).',
     });
   }
   const server = serverById(config, descriptor.serverId);
@@ -509,6 +558,8 @@ export async function nodeWidget(gladys, config, settings = {}, units = 'metric'
     return messageContent(config, {
       en: 'This node belongs to a Proxmox server that is not configured any more.',
       fr: "Ce nœud appartient à un serveur Proxmox qui n'est plus configuré.",
+      de: 'Dieser Knoten gehört zu einem Proxmox-Server, der nicht mehr konfiguriert ist.',
+      es: 'Este nodo pertenece a un servidor Proxmox que ya no está configurado.',
     });
   }
 
@@ -538,24 +589,37 @@ export async function nodeWidget(gladys, config, settings = {}, units = 'metric'
   const status = formatBackupStatus(backup);
   const items = [
     {
-      label: { en: 'Last backup', fr: 'Dernière sauvegarde' },
+      label: {
+        en: 'Last backup',
+        fr: 'Dernière sauvegarde',
+        de: 'Letztes Backup',
+        es: 'Última copia de seguridad',
+      },
       value: clip(formatLastBackup(backup, timezone, server.date_format), MAX.STATUS_VALUE),
       color: verdictColor(status),
     },
     {
-      label: { en: 'Backup status', fr: 'Statut de la sauvegarde' },
+      label: {
+        en: 'Backup status',
+        fr: 'Statut de la sauvegarde',
+        de: 'Backup-Status',
+        es: 'Estado de la copia',
+      },
       value: clip(status, MAX.STATUS_VALUE),
       color: verdictColor(status),
     },
   ];
   const duration = formatDuration(backup?.duration);
   if (duration) {
-    items.push({ label: { en: 'Duration', fr: 'Durée' }, value: duration });
+    items.push({
+      label: { en: 'Duration', fr: 'Durée', de: 'Dauer', es: 'Duración' },
+      value: duration,
+    });
   }
   if (disks) {
     const smart = formatSmartStatus(disks);
     items.push({
-      label: { en: 'SMART status', fr: 'État SMART' },
+      label: { en: 'SMART status', fr: 'État SMART', de: 'SMART-Status', es: 'Estado SMART' },
       value: clip(smart, MAX.STATUS_VALUE),
       color: verdictColor(smart),
     });
@@ -575,7 +639,12 @@ export async function nodeWidget(gladys, config, settings = {}, units = 'metric'
         // Live: follows the published states, with the history Gladys keeps.
         type: 'chart',
         chart_type: 'bar',
-        title: { en: 'Backup duration', fr: 'Durée des sauvegardes' },
+        title: {
+          en: 'Backup duration',
+          fr: 'Durée des sauvegardes',
+          de: 'Backup-Dauer',
+          es: 'Duración de las copias',
+        },
         unit: 's',
         device_features: [
           nodeExternalIds(gladys, server, node).feature(NODE_FEATURE.BACKUP_DURATION),
@@ -596,27 +665,44 @@ export async function nodeWidget(gladys, config, settings = {}, units = 'metric'
  * @param {string} widget - The widget key.
  * @param {string} actionKey - The button action key.
  * @param {object} [settings] - The widget settings.
- * @returns {Promise<{en: string, fr: string}>} The toast.
+ * @returns {Promise<{en: string, fr: string, de: string, es: string}>} The toast.
  */
 export async function widgetAction(gladys, config, widget, actionKey, settings = {}) {
   if (actionKey !== WIDGET_ACTION.REFRESH) {
     throw new Error(`Unknown widget action "${actionKey}".`);
   }
   if (listServers(config).length === 0) {
-    return { en: 'Proxmox is not configured yet.', fr: "Proxmox n'est pas encore configuré." };
+    return {
+      en: 'Proxmox is not configured yet.',
+      fr: "Proxmox n'est pas encore configuré.",
+      de: 'Proxmox ist noch nicht konfiguriert.',
+      es: 'Proxmox aún no está configurado.',
+    };
   }
   if (widget === WIDGET.NODE) {
     // Only the node on screen: the others are not what the user is looking at.
     await pollDevice(gladys, config, { external_id: settings?.node }, { force: true });
-    return { en: 'Node read again.', fr: 'Nœud relu.' };
+    return {
+      en: 'Node read again.',
+      fr: 'Nœud relu.',
+      de: 'Knoten neu gelesen.',
+      es: 'Nodo leído de nuevo.',
+    };
   }
   const results = await pollAllDevices(gladys, config);
   const failed = results.filter((result) => result.error).length;
   if (failed === 0) {
-    return { en: 'Proxmox read again.', fr: 'Proxmox relu.' };
+    return {
+      en: 'Proxmox read again.',
+      fr: 'Proxmox relu.',
+      de: 'Proxmox neu gelesen.',
+      es: 'Proxmox leído de nuevo.',
+    };
   }
   return {
     en: `Read again, ${failed} device(s) failed.`,
     fr: `Relu, échec sur ${failed} appareil(s).`,
+    de: `Neu gelesen, ${failed} Gerät(e) fehlgeschlagen.`,
+    es: `Leído de nuevo, ${failed} dispositivo(s) con fallo.`,
   };
 }
