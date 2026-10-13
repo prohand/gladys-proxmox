@@ -6,6 +6,8 @@ All notable changes to this integration are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-13
+
 ### Added
 
 - German and Spanish translations (configuration screen, messages, widgets, documentation).
@@ -116,7 +118,8 @@ First public release.
 - Publish a poll frequency Gladys accepts, and hold the real interval
 - Declare min/max on every feature, and report statuses as text
 
-[Unreleased]: https://github.com/prohand/gladys-proxmox/compare/v2.3.2...HEAD
+[Unreleased]: https://github.com/prohand/gladys-proxmox/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/prohand/gladys-proxmox/compare/v2.3.2...v2.4.0
 [2.3.2]: https://github.com/prohand/gladys-proxmox/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/prohand/gladys-proxmox/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/prohand/gladys-proxmox/compare/v2.2.0...v2.3.0
