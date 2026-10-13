@@ -427,8 +427,8 @@ tells you which one to fix.
 The result shows in green when everything went fine, and in red as soon as
 something needs your attention (a server refused, a node or a disk list it could
 not read, a device it could not refresh) — the whole report stays visible, the
-servers that answered fine included. A red result is written in English, then in
-French: Gladys shows an error as a single text.
+servers that answered fine included. A red result is written in English, French,
+German, then Spanish, one paragraph each: Gladys shows an error as a single text.
 
 ## Troubleshooting
 

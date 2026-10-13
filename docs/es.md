@@ -1,0 +1,545 @@
+# Proxmox
+
+Supervise las **copias de seguridad** de sus nodos Proxmox VE desde Gladys
+(cuándo se hizo la última, cuánto duró y si salió bien), el **estado SMART y la
+temperatura de sus discos**, y el **estado de ejecución de cada máquina virtual
+y contenedor LXC**.
+
+Esta integración es **estrictamente de solo lectura**. Solo realiza peticiones
+`GET` a la API de Proxmox VE y nada más: nunca inicia, detiene, migra, elimina
+ni reconfigura nada.
+
+## Qué obtiene
+
+Tras la instalación aparece un dispositivo de Gladys por cada nodo Proxmox,
+llamado `Proxmox <nodo>`, con tres funciones de solo lectura sobre su **última
+copia de seguridad** (una tarea `vzdump` de Proxmox):
+
+| Función             | Tipo          | Qué contiene                                                                                                                                                                |
+| ------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Last backup**     | Texto         | Cuándo empezó la última copia, en su zona horaria y en el formato de fecha elegido, p. ej. `16/08/2026 11:25:04`. Contiene `unknown` cuando el nodo no tiene ninguna copia. |
+| **Backup duration** | Sensor entero | Cuánto duró esa copia, en segundos. Se guarda en el historial, así que puede representarla en un gráfico y activar escenas con ella.                                        |
+| **Backup status**   | Texto         | `OK`, o `failed — ` seguido de lo que dijo Proxmox, p. ej. `failed — command 'lvcreate' failed: exit code 5`.                                                               |
+
+Salvo que desactive la _Supervisión de discos_, el mismo dispositivo lleva
+también el estado de los **discos físicos** de ese nodo:
+
+| Función                       | Tipo                  | Qué contiene                                                                                                                                      |
+| ----------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SMART status**              | Texto                 | `OK (3 disks)` cuando todos los discos pasan, `failed — /dev/sdb: FAILED` cuando uno no pasa, `unknown` cuando no se pudo leer ningún veredicto.  |
+| **Disk `<name>` temperature** | Sensor de temperatura | Un sensor por disco encontrado cuando se descubrió el nodo (`Disk sda temperature`, `Disk nvme0n1 temperature`), en °C, guardado en el historial. |
+
+Y un dispositivo de Gladys por máquina virtual y por contenedor LXC, llamado
+`Proxmox <nombre> (<vmid>)`:
+
+| Función    | Tipo  | Qué contiene                                                                                  |
+| ---------- | ----- | --------------------------------------------------------------------------------------------- |
+| **Status** | Texto | La palabra de estado de Proxmox, tal cual llega: `running`, `stopped`, `paused`, `suspended`… |
+
+**¿Por qué texto y no sensores de encendido/apagado?** Proxmox responde con una
+palabra o con una línea de error completa, y una función binaria solo puede
+decir "no encendido": una VM en pausa se leía exactamente igual que una
+detenida, y una copia fallida no decía nada del _porqué_; había que abrir el
+registro de tareas de Proxmox para descubrir el almacén de datos lleno. Las
+funciones de texto llevan la propia respuesta. Además, un interruptor es la
+forma que Gladys da a un actuador, y estas lecturas de solo lectura nunca lo
+son.
+
+Qué cuenta como éxito sigue siendo decisión suya: con el valor predeterminado
+_Solo OK_, una ejecución que terminó en `WARNINGS: 2` publica
+`failed — WARNINGS: 2`; cambie _Qué cuenta como copia de seguridad correcta_ a
+_OK y advertencias_ y la misma ejecución publica `OK`.
+
+Un nodo sin ninguna copia dentro del periodo de observación publica `unknown` en
+**Last backup** y en **Backup status**, y deja **Backup duration** desconocida
+en lugar de mostrar una copia de `0 s` que nunca ocurrió. Un disco que no
+informa de su temperatura se trata igual: ningún `0 °C` que pareciera una
+medición. Las plantillas nunca se convierten en dispositivos, y un invitado que
+desaparece (eliminado, o ya no visible para el token) conserva su último estado
+conocido en lugar de mostrarse como detenido.
+
+El uso natural en Gladys es una escena activada por esos textos: _cuando
+"Backup status" en pve1 no sea "OK", avíseme_, o _cuando "Status" de mi VM NAS
+no sea "running", avíseme_. **Backup duration** es la que tiene historial, así
+que es la que puede representar en un gráfico.
+
+### Varios trabajos de copia de seguridad
+
+Proxmox se lee **por nodo**, no por trabajo. Programe los trabajos que programe
+(las VM a las 02:00, los contenedores a las 04:00, un trabajo por
+almacenamiento…), las tres funciones describen siempre la **tarea `vzdump`
+terminada más reciente de ese nodo**, sea cual sea el trabajo que la produjo. Un
+trabajo que cubre invitados repartidos en varios nodos ejecuta una tarea por
+nodo, así que cada dispositivo de nodo informa de su propia parte, y un trabajo
+que sigue en curso no se informa hasta que termina; mientras tanto, la anterior
+sigue en pantalla.
+
+De ello se deduce que un trabajo posterior sobrescribe el veredicto de uno
+anterior. Si el trabajo de las 02:00 falla y el de las 04:00 sale bien,
+**Backup status** muestra `failed — …` durante dos horas y luego `OK`. Eso es lo
+que detecta una escena activada por el _cambio_ del estado (la forma recomendada
+aquí), mientras que un valor leído una vez al día a mediodía solo vería el
+trabajo correcto. La ejecución fallida en sí nunca desaparece del registro de
+tareas de Proxmox.
+
+Hoy no existe un dispositivo por trabajo: si necesita seguir cada trabajo por
+separado, abra una incidencia indicándolo.
+
+### Dos servidores Proxmox
+
+La configuración tiene **dos bloques idénticos**: rellene el segundo y la
+integración supervisará un segundo Proxmox completamente independiente, con su
+propio host, su propio token de API, sus propios ajustes TLS y su propio filtro
+de nodos. Todo lo que sigue (permisos, TLS, acciones) se aplica a cada uno por
+separado.
+
+Los dispositivos del segundo servidor llevan su propia etiqueta, así que nada
+choca: un nodo llamado `pve1` en ambos servidores aparece como **Proxmox pve1**
+y **Proxmox 2 pve1**, y una VM 101 en cada uno aparece también dos veces.
+Rellene _Nombre de este Proxmox_ en cualquiera de los bloques para darles el
+nombre que quiera (`Casa`, `Oficina`…).
+
+Si solo tiene un Proxmox, deje vacío el segundo bloque y no cambiará nada.
+
+---
+
+## Permisos de Proxmox necesarios (solo lectura)
+
+Esta es la parte que merece la pena hacer bien. La integración necesita **dos
+privilegios de auditoría (lectura)**, y nada más:
+
+| Privilegio    | En la ruta       | Por qué                                                          |
+| ------------- | ---------------- | ---------------------------------------------------------------- |
+| **Sys.Audit** | `/nodes` (o `/`) | Leer el registro de tareas de los nodos, su estado y sus discos. |
+| **VM.Audit**  | `/vms` (o `/`)   | Ver las máquinas virtuales y los contenedores, y su estado.      |
+
+Nada más. Ningún `Datastore.*`, ningún `Sys.Modify`, ningún `VM.PowerMgmt`,
+ningún `Sys.Console`, ningún acceso root, ningún acceso a la shell.
+
+### Qué endpoints se llaman
+
+| Endpoint                               | Método | Privilegio necesario                  |
+| -------------------------------------- | ------ | ------------------------------------- |
+| `/api2/json/nodes`                     | GET    | ninguno (cualquier token autenticado) |
+| `/api2/json/nodes/{node}/tasks`        | GET    | `Sys.Audit` en `/nodes/{node}` \*     |
+| `/api2/json/nodes/{node}/status`       | GET    | `Sys.Audit` en `/nodes/{node}`        |
+| `/api2/json/nodes/{node}/disks/list`   | GET    | `Sys.Audit` en `/nodes/{node}` †      |
+| `/api2/json/nodes/{node}/disks/smart`  | GET    | `Sys.Audit` en `/nodes/{node}` †      |
+| `/api2/json/cluster/resources?type=vm` | GET    | `VM.Audit` en `/vms/{vmid}` \*        |
+
+\* **Sutileza importante.** Ambas listas se _filtran según los permisos_, no se
+_rechazan por falta de permisos_. Sin `Sys.Audit` en `/nodes/{node}`, Proxmox
+responde `200 OK` con solo las tareas que el propio token inició, lo que, para
+un token que nunca inicia nada, es una lista vacía. Sin `VM.Audit`, la lista de
+invitados vuelve vacía de la misma forma. Así que una configuración con
+privilegios insuficientes no parece rota: las funciones de copia de seguridad
+simplemente se quedan en `unknown` para siempre y no aparece ninguna VM. Por eso
+el botón **Probar la conexión** consulta `/nodes/{node}/status` (que _sí_
+devuelve `403`) y le indica exactamente a qué nodos les falta el privilegio y
+cuántos invitados puede ver realmente el token.
+
+† Solo se llaman cuando la _Supervisión de discos_ está activada. Estos dos, a
+diferencia de las listas anteriores, _sí_ se rechazan con un `403`: un token sin
+`Sys.Audit` obtiene `unknown` en el estado SMART, y **Probar la conexión** nombra
+los nodos que no pudo leer.
+
+### Opción A: el rol integrado `PVEAuditor` (la más sencilla)
+
+`PVEAuditor` es el propio rol de solo lectura de Proxmox. Concede `Sys.Audit` y
+`VM.Audit` además de los demás privilegios de auditoría (`Datastore.Audit`,
+`Pool.Audit`, `SDN.Audit`, `Mapping.Audit`, `VM.GuestAgent.Audit`). Es de solo
+lectura por construcción (no contiene ningún `*.Modify`, ningún `*.Allocate`,
+ningún `*.PowerMgmt`, ningún `Sys.Console`), pero es más amplio de lo que usa
+esta integración.
+
+En la interfaz web de Proxmox:
+
+1. **Datacenter → Permissions → Users → Add**
+   - User name: `gladys`, Realm: `Proxmox VE authentication server (pve)`
+   - Establezca una contraseña (la integración nunca la usa, pero Proxmox exige una)
+2. **Datacenter → Permissions → Add → User Permission**
+   - Path: `/` — User: `gladys@pve` — Role: `PVEAuditor` — Propagate: ✔
+3. **Datacenter → Permissions → API Tokens → Add**
+   - User: `gladys@pve` — Token ID: `tasks`
+   - **Privilege Separation: déjelo marcado** (vea la nota más abajo)
+   - Proxmox muestra ahora el secreto **una sola vez**: cópielo, no se vuelve a mostrar nunca
+4. **Datacenter → Permissions → Add → API Token Permission**
+   - Path: `/` — API Token: `gladys@pve!tasks` — Role: `PVEAuditor` — Propagate: ✔
+
+O bien, desde una shell en cualquier nodo:
+
+```bash
+pveum user add gladys@pve --password "$(openssl rand -base64 24)"
+pveum acl modify / --users gladys@pve --roles PVEAuditor
+
+# Prints the secret once — copy it into Gladys.
+pveum user token add gladys@pve tasks --privsep 1
+pveum acl modify / --tokens 'gladys@pve!tasks' --roles PVEAuditor
+```
+
+Conceder en `/` (en lugar de en `/nodes` y `/vms` por separado) es la forma más
+sencilla y sigue siendo de solo lectura: es el propio rol lo que limita el
+token.
+
+### Opción B: un rol personalizado mínimo (mínimo privilegio)
+
+Si prefiere conceder solo lo que realmente se usa, cree un rol que contenga
+`Sys.Audit` y `VM.Audit` y nada más:
+
+```bash
+pveum role add GladysBackupAudit --privs "Sys.Audit,VM.Audit"
+
+pveum user add gladys@pve --password "$(openssl rand -base64 24)"
+pveum acl modify /nodes --users gladys@pve --roles GladysBackupAudit
+pveum acl modify /vms   --users gladys@pve --roles GladysBackupAudit
+
+pveum user token add gladys@pve tasks --privsep 1
+pveum acl modify /nodes --tokens 'gladys@pve!tasks' --roles GladysBackupAudit
+pveum acl modify /vms   --tokens 'gladys@pve!tasks' --roles GladysBackupAudit
+```
+
+Es la configuración más ajustada con la que puede funcionar la integración.
+
+### Sobre la separación de privilegios
+
+Cuando un token se crea con **separación de privilegios** (`--privsep 1`, el
+valor predeterminado y el recomendado), sus permisos efectivos son la
+**intersección** de los permisos del usuario y de la ACL propia del token. Por
+eso todas las líneas `pveum acl modify` anteriores son necesarias: unas para el
+usuario y otras para el token.
+
+Crear el token con `--privsep 0` hace que herede directamente los permisos del
+usuario y omite las ACL del token, pero también significa que el token puede
+hacer todo lo que puede hacer el usuario, para siempre. Es preferible la
+separación de privilegios.
+
+### Comprobación
+
+Use el botón **Probar la conexión** de la pestaña "Configuración" de la
+integración. Informa, nodo por nodo, de si el token puede leer realmente el
+registro de tareas, de cuántas VM y contenedores puede ver, y nombra el
+privilegio que falta cuando algo se deniega.
+
+También puede comprobarlo a mano:
+
+```bash
+curl -sS --insecure \
+  -H "Authorization: PVEAPIToken=gladys@pve!tasks=YOUR-SECRET" \
+  "https://192.168.1.10:8006/api2/json/nodes/pve1/tasks?typefilter=vzdump&limit=5"
+
+curl -sS --insecure \
+  -H "Authorization: PVEAPIToken=gladys@pve!tasks=YOUR-SECRET" \
+  "https://192.168.1.10:8006/api2/json/cluster/resources?type=vm"
+```
+
+---
+
+## Configuración
+
+Los seis primeros campos de abajo existen **dos veces**: una para el primer
+Proxmox y otra para el segundo, opcional. Los seis últimos son comunes a ambos.
+
+| Campo                                                | Obligatorio | Por defecto                 | Notas                                                                                                                    |
+| ---------------------------------------------------- | ----------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Nombre de este Proxmox**                           | no          | Proxmox                     | Se antepone al nombre de cada dispositivo de ese servidor. El segundo bloque usa `Proxmox 2` por defecto.                |
+| **Host de Proxmox**                                  | sí          | —                           | IP o nombre de host de cualquier nodo: un nodo responde por todo el clúster. También vale una URL pegada, vea más abajo. |
+| **Puerto de la API**                                 | no          | `8006`                      | El puerto de la API de Proxmox VE.                                                                                       |
+| **ID del token de API**                              | sí          | —                           | La forma completa `user@realm!tokenname`, p. ej. `gladys@pve!tasks`.                                                     |
+| **Secreto del token de API**                         | sí          | —                           | El valor que Proxmox muestra una vez. Gladys lo guarda cifrado y nunca lo devuelve a su navegador.                       |
+| **Huella del certificado TLS**                       | no          | vacío                       | Huella SHA-256 del certificado del nodo. Vea más abajo.                                                                  |
+| **Verificar el certificado TLS**                     | no          | activado                    | Déjelo activado. Vea más abajo.                                                                                          |
+| **Nodos que supervisar**                             | no          | todos                       | Nombres de nodos separados por comas, p. ej. `pve1, pve2`. También limita las VM/LXC de las que se informa.              |
+| **Cuántos días atrás buscar una copia de seguridad** | no          | `7` d                       | La última copia se busca dentro de este periodo.                                                                         |
+| **Qué cuenta como copia de seguridad correcta**      | no          | Solo OK                     | Si una copia que terminó con `WARNINGS: n` sigue contando como correcta.                                                 |
+| **Zona horaria**                                     | no          | host                        | Zona IANA usada para mostrar la marca de tiempo, p. ej. `Europe/Paris`.                                                  |
+| **Formato de fecha**                                 | no          | `16/08/2026 11:25:04`       | Cómo se escribe esa marca de tiempo: día primero, mes primero, ISO, o ISO seguido de la zona horaria.                    |
+| **Supervisión de discos (SMART)**                    | no          | Estado SMART y temperaturas | Qué se lee de los discos físicos; vea más abajo.                                                                         |
+| **Intervalo de actualización**                       | no          | `300` s                     | Con qué frecuencia se lee Proxmox, entre 60 s y una hora.                                                                |
+
+_Host de Proxmox_ admite un nombre de host o una dirección IP, pero la dirección
+que tiene delante es la de su navegador, así que también se acepta una URL
+pegada: `https://pve.lan:8006/#v1:0:18` se lee como el host `pve.lan` en el
+puerto `8006`. Se descartan el esquema, la ruta y cualquier credencial, y el
+puerto escrito en la dirección prevalece sobre el campo _Puerto de la API_.
+
+Solo el host y el token del primer servidor son obligatorios: todo el segundo
+bloque es opcional. _Cuántos días atrás buscar una copia de seguridad_, _Qué
+cuenta como copia de seguridad correcta_, _Zona horaria_, _Formato de fecha_,
+_Supervisión de discos_ e _Intervalo de actualización_ se configuran una sola
+vez y se aplican a todos los servidores.
+
+La hora se muestra siempre en formato de 24 horas, y la zona horaria no se
+repite en el recuadro: ya sabe en cuál vive. Elija la última opción de _Formato
+de fecha_ si quiere que se muestre, por ejemplo cuando el Proxmox y la persona
+que lee el panel no están en el mismo país.
+
+### Supervisión de discos
+
+La _Supervisión de discos_ tiene tres opciones:
+
+- **Estado SMART y temperaturas** (por defecto): el veredicto de salud de cada
+  disco y un sensor de temperatura por disco. Leer los veredictos cuesta una
+  petición por nodo; las temperaturas cuestan una petición más por disco, y
+  cada una ejecuta un `smartctl` en el lado de Proxmox.
+- **Solo estado SMART**: los veredictos y nada más. Una petición por nodo,
+  ningún `smartctl` por unidad.
+- **Desactivado**: los discos no se leen nunca y los dispositivos de nodo solo
+  llevan sus funciones de copia de seguridad.
+
+Ambas lecturas necesitan `Sys.Audit` en `/nodes`, exactamente como las copias
+de seguridad: _Probar la conexión_ le dice cuántos discos puede leer el token y
+nombra los nodos donde no puede. Un disco sin veredicto SMART (una controladora
+que `smartctl` no conoce, una caja USB) se cuenta aparte en lugar de informarse
+como fallido, y un nodo cuya lista de discos no se puede leer en absoluto
+informa `unknown` sin que eso le cueste nunca sus funciones de copia de
+seguridad.
+
+Los sensores de temperatura se crean cuando se descubre el nodo. Añada o
+sustituya un disco y obtendrá su propio sensor en la siguiente búsqueda
+(pestaña "Descubrir", o al guardar la configuración).
+
+Gladys no puede pedir una actualización con menos frecuencia que una vez por
+minuto, así que la integración se encarga de la espera adicional: se la llama
+cada minuto y solo lee Proxmox cuando ha transcurrido el intervalo que ha
+configurado. Entre medias no se publica nada y los valores que ya están en el
+panel se quedan como están.
+
+Un dispositivo que acaba de añadir desde la pestaña "Descubrir" es la
+excepción: se lee de inmediato en lugar de en el siguiente ciclo, así que lleva
+su copia de seguridad (o su estado) en cuanto aparece, sin que tenga que pulsar
+_Actualizar ahora_.
+
+### TLS: el certificado autofirmado de Proxmox
+
+De fábrica, un nodo Proxmox sirve un certificado **autofirmado**, en el que
+ningún contenedor confía. Tiene tres opciones, de mejor a peor:
+
+1. **Fijar la huella (recomendado).** Pegue la huella SHA-256 del nodo en el
+   campo _Huella del certificado TLS_. La conexión queda entonces cifrada _y_
+   autenticada, sin ninguna autoridad de certificación pública. Encontrará la
+   huella en la interfaz en **Node → System → Certificates →
+   `pveproxy-ssl.pem`**, o desde una shell:
+
+   ```bash
+   openssl x509 -in /etc/pve/local/pveproxy-ssl.pem -noout -fingerprint -sha256
+   # falls back to the node's own certificate when no custom one is installed:
+   openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
+   ```
+
+   Se acepta cualquier formato (`AA:BB:CC…`, `aabbcc…`, con o sin espacios).
+
+   Tenga en cuenta que la huella cambia cuando el certificado se renueva o se
+   sustituye: actualice entonces el campo o pase a la opción 2.
+
+2. **Instalar un certificado de confianza** en el nodo (Let's Encrypt mediante
+   el soporte ACME de Proxmox, o su propia CA instalada en el almacén de
+   confianza del contenedor). Deje ambos campos TLS con sus valores por
+   defecto.
+
+3. **Desactivar _Verificar el certificado TLS_.** Último recurso, solo en una
+   LAN de confianza: el tráfico sigue cifrado, pero nada demuestra que el
+   servidor al que llega sea realmente su nodo, y el secreto del token de API
+   viaja por esa conexión.
+
+### Qué cuenta como copia de seguridad correcta
+
+Proxmox registra una copia terminada con uno de estos estados, y **Backup
+status** publica:
+
+| Estado de Proxmox | Significado                                 | "Solo OK" (por defecto)                     | "OK y advertencias"                         |
+| ----------------- | ------------------------------------------- | ------------------------------------------- | ------------------------------------------- |
+| `OK`              | éxito                                       | `OK`                                        | `OK`                                        |
+| `WARNINGS: 3`     | terminada, con advertencias                 | `failed — WARNINGS: 3`                      | `OK`                                        |
+| cualquier otro    | mensaje de error                            | `failed — <the error>`                      | `failed — <the error>`                      |
+| _(vacío)_         | sin estado de salida: el proceso se bloqueó | `failed — no exit status (worker crashed?)` | `failed — no exit status (worker crashed?)` |
+
+Una copia que se completó pero omitió un invitado termina en `WARNINGS: n`.
+Elija _OK y advertencias_ si eso le parece suficiente.
+
+Solo se leen las copias **terminadas** (la lista de tareas archivadas de
+Proxmox): una copia aún en curso todavía no es la última copia.
+
+## Widgets del panel (Gladys 5.1)
+
+Se pueden añadir tres tarjetas a un panel (_Editar panel → Agregar →
+Proxmox_). Las dibuja el propio Gladys, así que siguen su tema, su modo oscuro
+y su idioma:
+
+- **Copias de seguridad Proxmox**: el número de nodos cuya última copia está
+  OK, ha fallado o no existe, y luego una tarjeta por nodo (hasta 8), primero
+  los fallos: el nombre del nodo, la fecha de su última copia y una insignia de
+  color _Correcta_ / _Fallida_ / _Ninguna_ (un fallo muestra también lo que dijo
+  Proxmox).
+- **Proxmox VM/LXC**: cuántos invitados están en ejecución o detenidos, y luego
+  una línea por VM/LXC, primero las que no están en ejecución. Su ajuste
+  _Mostrar_ puede conservar solo las que no están en ejecución.
+- **Nodo Proxmox**: un nodo, elegido en sus ajustes: la última copia, su estado
+  y su duración, el veredicto SMART, la temperatura de sus cuatro discos más
+  calientes (naranja desde 50 °C, rojo desde 60 °C) y un gráfico de las
+  duraciones de las copias durante el último mes.
+
+Cada tarjeta tiene un botón **Actualizar** que vuelve a leer Proxmox al momento.
+Las tarjetas se actualizan con el intervalo de actualización de la integración;
+un nodo leído hace un momento por un sondeo se muestra a partir de esa lectura,
+así que un panel que se deja abierto no le cuesta nada más a Proxmox.
+
+## Escenas (Gladys 5.1)
+
+### Disparadores
+
+Se encuentran en el editor de escenas, en _Integraciones_. Cada uno se dispara
+**una vez, cuando ocurre el hecho** (nunca en cada actualización), y dejar un
+filtro vacío significa "cualquiera".
+
+| Disparador                                | Se dispara cuando                                                            | Filtros                            | Variables para las siguientes acciones                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------- |
+| **Copia de seguridad Proxmox terminada**  | ha terminado una tarea de copia de seguridad de un nodo                      | nodo, resultado (correcta/fallida) | `node`, `server`, `result`, `status`, `started_at`, `duration_seconds` |
+| **Estado de una VM/LXC Proxmox cambiado** | una VM o un LXC ha pasado de un estado a otro                                | VM/LXC, nuevo estado               | `name`, `vmid`, `kind`, `node`, `server`, `status`, `previous_status`  |
+| **Disco Proxmox con fallo (SMART)**       | el veredicto SMART de un disco ha pasado a fallido (requiere SMART activado) | nodo                               | `node`, `server`, `disk`, `model`, `health`                            |
+
+Uso típico: _Copia de seguridad Proxmox terminada_, resultado **Fallida** →
+enviar un mensaje "La copia de {{node}} ha fallado: {{status}}".
+
+Los cambios se detectan cuando se lee Proxmox (el intervalo de actualización), y
+solo mientras la integración está en marcha: lo que ocurrió mientras estaba
+detenida no se reproduce al reiniciar. Un estado de VM o un veredicto de disco
+que ya es cierto al arrancar es el punto de partida, no un evento.
+
+### Acciones
+
+Todas **leen**: una escena no puede iniciar ni detener una VM, igual que el
+resto de esta integración.
+
+- **Actualizar Proxmox**: lee ahora todos los nodos y VM/LXC y publica los
+  estados. Proporciona a la escena `backups_ok`, `backups_failed`,
+  `backups_unknown`, `guests_running`, `guests_not_running` y `errors`
+  (recuentos), para comprobarlos en una condición.
+- **Obtener la última copia de seguridad de Proxmox**: para un nodo:
+  `has_backup`, `success`, `status`, `last_backup`, `duration_seconds`. Útil
+  para un mensaje de resumen por la mañana.
+- **Obtener el estado SMART de un nodo Proxmox**: para un nodo: `status`
+  (`OK (3 disks)`, `failed — /dev/sdb: FAILED`…), `disk_count`, `failed_disks`,
+  `unknown_disks` y `max_temperature` (°C, solo cuando se leyó una
+  temperatura). Requiere la supervisión de discos activada: cuando está
+  desactivada, la acción falla con un mensaje que lo indica.
+- **Obtener el estado de una VM/LXC de Proxmox**: para una VM/LXC: `status`,
+  `running`, `name`, `node`.
+
+El nodo o la VM/LXC se elige entre los dispositivos de esta integración:
+añádalo primero desde la pestaña _Descubrir_. Elegir una VM para una copia de
+seguridad (o un nodo para un estado de VM) hace fallar solo esa acción, con un
+mensaje que lo indica.
+
+## Acciones
+
+- **Probar la conexión**: comprueba que el host responde, que el token de API
+  se acepta, que puede leer realmente el registro de tareas de cada nodo
+  supervisado, cuántas VM/LXC puede ver y de cuántos discos puede leer los datos
+  SMART. Ejecútela primero siempre que algo parezca ir mal.
+- **Actualizar ahora**: lee las copias de seguridad, los discos y los estados
+  de las VM/LXC de inmediato, sin esperar a la siguiente actualización.
+
+Ambas se ejecutan en cada servidor configurado y anteponen `[<nombre>]` a cada
+resultado cuando hay dos, de modo que un mensaje como
+`[Oficina] Proxmox ha rechazado el token de API (401)` le indica cuál corregir.
+
+El resultado se muestra en verde cuando todo ha ido bien, y en rojo en cuanto
+algo requiere su atención (un servidor que rechaza, un nodo o una lista de
+discos que no se pudo leer, un dispositivo que no se pudo actualizar); el
+informe completo sigue visible, incluidos los servidores que respondieron bien.
+Un resultado en rojo se escribe en inglés, francés, alemán y después español,
+un párrafo por idioma: Gladys muestra un error como un único texto.
+
+## Solución de problemas
+
+**"Proxmox ha rechazado el token de API (401)"**: el ID del token o el secreto
+es incorrecto. El ID debe ser la forma _completa_ `user@realm!tokenname`
+(`gladys@pve!tasks`), no solo el nombre del token. Si ha perdido el secreto,
+elimine el token y cree uno nuevo: Proxmox solo lo muestra una vez.
+
+**"el token no puede leer el registro de tareas de: …"**: al token le falta
+`Sys.Audit` en esos nodos. Vuelva a leer la sección de permisos anterior; con la
+separación de privilegios activada, recuerde que _tanto_ el usuario como el
+token necesitan la ACL.
+
+**"No hay ninguna VM ni LXC visible"**: al token le falta `VM.Audit` (en `/vms`,
+o en `/`). La lista de invitados se filtra en lugar de rechazarse, así que un
+token con privilegios insuficientes simplemente no ve nada.
+
+**"Last backup" se queda en `unknown` aunque la interfaz de Proxmox muestra
+copias**: o bien falta el privilegio `Sys.Audit` indicado arriba (ejecute
+**Probar la conexión**), o bien el periodo es más corto que su programación de
+copias: un nodo copiado cada dos semanas no informa de nada con el periodo
+predeterminado de 7 días. Aumente _Cuántos días atrás buscar una copia de
+seguridad_.
+
+**"Backup status" muestra `failed — WARNINGS: 2` aunque la copia parece
+correcta**: la copia terminó con advertencias (se omitió un invitado, un hook
+devolvió un valor distinto de cero…). El texto tras `failed — ` son las propias
+palabras de Proxmox: abra esa tarea en la interfaz de Proxmox para ver el
+motivo, o cambie _Qué cuenta como copia de seguridad correcta_ a _OK y
+advertencias_, y esa ejecución mostrará `OK`.
+
+**Una VM que eliminé sigue apareciendo**: el dispositivo de Gladys permanece
+hasta que lo elimine en Gladys; la integración deja de publicar estados para
+él, así que simplemente se queda congelado en su último valor.
+
+**"Proxmox presents a self-signed certificate"**: fije su huella; vea la sección
+TLS anterior.
+
+**"Cannot resolve the host name …"**: el nombre de _Host de Proxmox_ no se pudo
+resolver (`EAI_AGAIN`, `ENOTFOUND`). Compruebe cómo está escrito y que la
+máquina que ejecuta la integración lo resuelve: un nombre corto `.local`/LAN a
+menudo solo se resuelve en la red de la que procede, mientras que la dirección
+IP funciona siempre.
+
+**"… refused the connection"**: el host responde, pero nada escucha en ese
+puerto: compruebe el _Puerto de la API_ (`8006` por defecto).
+
+**"Cannot reach …"**: compruebe el host y el puerto (`8006`), y que el
+contenedor de Gladys puede llegar al nodo en su red. Con dos servidores
+configurados, el mensaje nombra el que no respondió; el otro se sigue
+actualizando con normalidad.
+
+**Dos dispositivos con el mismo nombre**: ambos servidores usan la misma
+etiqueta. Rellene _Nombre de este Proxmox_ en al menos un bloque. Renombrar un
+servidor cambia los nombres de los dispositivos que descubra a partir de
+entonces; los dispositivos que Gladys ya ha creado conservan el nombre que ve en
+Gladys y se pueden renombrar allí.
+
+**Los dispositivos de mi segundo servidor han desaparecido del panel**: vaciar
+el segundo bloque detiene su supervisión, pero sus dispositivos de Gladys
+permanecen, congelados en su último valor conocido, hasta que los elimine en
+Gladys.
+
+**Las marcas de tiempo tienen unas horas de desfase**: indique en el campo
+_Zona horaria_ su zona IANA (`Europe/Paris`, `America/New_York`…). Si lo deja
+vacío, la integración usa la zona horaria de la máquina en la que se ejecuta
+Gladys, que dentro de un contenedor suele ser UTC. _Formato de fecha_ decide
+cómo se escribe esa fecha y si la zona se muestra a su lado.
+
+**"SMART status" se queda en `unknown`**: el token no puede leer
+`/nodes/{node}/disks/list` (ejecute **Probar la conexión**: nombra los nodos), o
+`smartctl` no tiene veredicto para esas unidades: una controladora RAID que
+oculta sus miembros, una caja USB. Los discos detrás de una controladora RAID
+por hardware no son visibles en absoluto para Proxmox.
+
+**Un disco no tiene sensor de temperatura**: se añadió después de descubrir el
+nodo: lance una nueva búsqueda desde la pestaña "Descubrir" o guarde la
+configuración. Una unidad que no informa de ninguna temperatura (algunas
+unidades SAS y USB) no publica nada en lugar de un falso `0 °C`.
+
+La integración registra todo lo que hace: consulte los registros de la
+integración desde la interfaz de Gladys (o `docker logs` en el host), con
+`LOG_LEVEL=debug` para el detalle completo. El secreto del token de API nunca
+se registra.
+
+## Privacidad y seguridad
+
+- **De solo lectura por construcción.** El cliente solo implementa `GET`; no
+  hay ninguna ruta de código en esta integración que escriba en Proxmox.
+- Gladys guarda cifrado el secreto del token de API, nunca se devuelve al
+  navegador (es un campo de configuración `secret`) y nunca se escribe en los
+  registros.
+- La integración no habla con nada más que con su host Proxmox: ningún servicio
+  en la nube, ninguna telemetría, ninguna llamada saliente de ningún tipo.

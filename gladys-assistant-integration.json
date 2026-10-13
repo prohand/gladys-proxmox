@@ -4,7 +4,9 @@
   "name": "Proxmox",
   "description": {
     "en": "Proxmox VE backups per node (last run, duration, status) and the state of every VM and LXC.",
-    "fr": "Sauvegardes Proxmox VE par nœud (dernière, durée, statut) et état de chaque VM et LXC."
+    "fr": "Sauvegardes Proxmox VE par nœud (dernière, durée, statut) et état de chaque VM et LXC.",
+    "de": "Proxmox-VE-Backups pro Knoten (letztes, Dauer, Status) und der Zustand jeder VM und jedes LXC.",
+    "es": "Copias de Proxmox VE por nodo (última, duración, estado) y el estado de cada VM y LXC."
   },
   "version": "2.3.2",
   "docker_image": "ghcr.io/prohand/gladys-proxmox:2.3.2",
@@ -18,25 +20,33 @@
       "type": "section",
       "label": {
         "en": "First Proxmox server — read-only API token",
-        "fr": "Premier serveur Proxmox — jeton d'API en lecture seule"
+        "fr": "Premier serveur Proxmox — jeton d'API en lecture seule",
+        "de": "Erster Proxmox-Server — API-Token mit Lesezugriff",
+        "es": "Primer servidor Proxmox — token de API de solo lectura"
       },
       "description": {
         "en": "This integration only READS Proxmox: the backup task log of the nodes, and the state of the VMs/LXC. Create a dedicated user, give it the built-in PVEAuditor role on / (Sys.Audit on /nodes and VM.Audit on /vms), then add an API token to that user. With privilege separation enabled, the token needs the same ACL as its user. Full step-by-step in the Documentation link below.",
-        "fr": "Cette intégration LIT uniquement Proxmox : le journal des tâches de sauvegarde des nœuds, et l'état des VM/LXC. Créez un utilisateur dédié, donnez-lui le rôle intégré PVEAuditor sur / (Sys.Audit sur /nodes et VM.Audit sur /vms), puis ajoutez-lui un jeton d'API. Si la séparation de privilèges est activée, le jeton doit recevoir la même ACL que son utilisateur. Procédure détaillée dans le lien Documentation ci-dessous."
+        "fr": "Cette intégration LIT uniquement Proxmox : le journal des tâches de sauvegarde des nœuds, et l'état des VM/LXC. Créez un utilisateur dédié, donnez-lui le rôle intégré PVEAuditor sur / (Sys.Audit sur /nodes et VM.Audit sur /vms), puis ajoutez-lui un jeton d'API. Si la séparation de privilèges est activée, le jeton doit recevoir la même ACL que son utilisateur. Procédure détaillée dans le lien Documentation ci-dessous.",
+        "de": "Diese Integration LIEST Proxmox nur: das Backup-Aufgabenprotokoll der Knoten und den Zustand der VMs/LXC. Legen Sie einen eigenen Benutzer an, geben Sie ihm die integrierte Rolle PVEAuditor auf / (Sys.Audit auf /nodes und VM.Audit auf /vms) und fügen Sie diesem Benutzer dann ein API-Token hinzu. Bei aktivierter Privilegientrennung benötigt das Token dieselbe ACL wie sein Benutzer. Die vollständige Schritt-für-Schritt-Anleitung finden Sie unter dem Link „Dokumentation“ unten.",
+        "es": "Esta integración solo LEE Proxmox: el registro de tareas de copia de seguridad de los nodos y el estado de las VM/LXC. Cree un usuario dedicado, asígnele el rol integrado PVEAuditor en / (Sys.Audit en /nodes y VM.Audit en /vms) y después añada un token de API a ese usuario. Con la separación de privilegios activada, el token necesita la misma ACL que su usuario. Encontrará el paso a paso completo en el enlace \"Documentación\" de abajo."
       },
       "links": [
         {
           "url": "https://pve.proxmox.com/wiki/User_Management",
           "label": {
             "en": "Proxmox user management",
-            "fr": "Gestion des utilisateurs Proxmox"
+            "fr": "Gestion des utilisateurs Proxmox",
+            "de": "Proxmox-Benutzerverwaltung",
+            "es": "Gestión de usuarios de Proxmox"
           }
         },
         {
           "url": "https://pve.proxmox.com/pve-docs/api-viewer/index.html",
           "label": {
             "en": "Proxmox VE API viewer",
-            "fr": "Explorateur d'API Proxmox VE"
+            "fr": "Explorateur d'API Proxmox VE",
+            "de": "Proxmox-VE-API-Viewer",
+            "es": "Visor de la API de Proxmox VE"
           }
         }
       ]
@@ -46,15 +56,21 @@
       "type": "string",
       "label": {
         "en": "Name of this Proxmox",
-        "fr": "Nom de ce Proxmox"
+        "fr": "Nom de ce Proxmox",
+        "de": "Name dieses Proxmox",
+        "es": "Nombre de este Proxmox"
       },
       "description": {
         "en": "Prefixes the name of every device of this server, e.g. \"Proxmox pve1\". Leave empty to use \"Proxmox\". Renaming it here does not rename the devices Gladys already created.",
-        "fr": "Préfixe le nom de chaque appareil de ce serveur, par exemple « Proxmox pve1 ». Laissez vide pour utiliser « Proxmox ». Le renommer ici ne renomme pas les appareils déjà créés par Gladys."
+        "fr": "Préfixe le nom de chaque appareil de ce serveur, par exemple « Proxmox pve1 ». Laissez vide pour utiliser « Proxmox ». Le renommer ici ne renomme pas les appareils déjà créés par Gladys.",
+        "de": "Wird dem Namen jedes Geräts dieses Servers vorangestellt, z. B. „Proxmox pve1“. Leer lassen, um „Proxmox“ zu verwenden. Eine Umbenennung hier benennt die Geräte, die Gladys bereits angelegt hat, nicht um.",
+        "es": "Se antepone al nombre de cada dispositivo de este servidor, p. ej. \"Proxmox pve1\". Déjelo vacío para usar \"Proxmox\". Cambiarlo aquí no renombra los dispositivos que Gladys ya ha creado."
       },
       "placeholder": {
         "en": "Proxmox",
-        "fr": "Proxmox"
+        "fr": "Proxmox",
+        "de": "Proxmox",
+        "es": "Proxmox"
       },
       "required": false
     },
@@ -63,15 +79,21 @@
       "type": "string",
       "label": {
         "en": "Proxmox host",
-        "fr": "Hôte Proxmox"
+        "fr": "Hôte Proxmox",
+        "de": "Proxmox-Host",
+        "es": "Host de Proxmox"
       },
       "description": {
         "en": "IP address or hostname of a Proxmox VE node (any node of the cluster answers for all of them).",
-        "fr": "Adresse IP ou nom d'hôte d'un nœud Proxmox VE (n'importe quel nœud du cluster répond pour tous)."
+        "fr": "Adresse IP ou nom d'hôte d'un nœud Proxmox VE (n'importe quel nœud du cluster répond pour tous).",
+        "de": "IP-Adresse oder Hostname eines Proxmox-VE-Knotens (jeder Knoten des Clusters antwortet für alle).",
+        "es": "Dirección IP o nombre de host de un nodo de Proxmox VE (cualquier nodo del clúster responde por todos)."
       },
       "placeholder": {
         "en": "192.168.1.10",
-        "fr": "192.168.1.10"
+        "fr": "192.168.1.10",
+        "de": "192.168.1.10",
+        "es": "192.168.1.10"
       },
       "required": true
     },
@@ -80,11 +102,15 @@
       "type": "number",
       "label": {
         "en": "API port",
-        "fr": "Port de l'API"
+        "fr": "Port de l'API",
+        "de": "API-Port",
+        "es": "Puerto de la API"
       },
       "description": {
         "en": "HTTPS port of the Proxmox VE API. The default Proxmox port is 8006.",
-        "fr": "Port HTTPS de l'API Proxmox VE. Le port Proxmox par défaut est 8006."
+        "fr": "Port HTTPS de l'API Proxmox VE. Le port Proxmox par défaut est 8006.",
+        "de": "HTTPS-Port der Proxmox-VE-API. Der Standardport von Proxmox ist 8006.",
+        "es": "Puerto HTTPS de la API de Proxmox VE. El puerto predeterminado de Proxmox es 8006."
       },
       "required": false,
       "default": 8006,
@@ -96,15 +122,21 @@
       "type": "string",
       "label": {
         "en": "API token ID",
-        "fr": "Identifiant du jeton d'API"
+        "fr": "Identifiant du jeton d'API",
+        "de": "API-Token-ID",
+        "es": "ID del token de API"
       },
       "description": {
         "en": "Full token id, in the user@realm!tokenname form, as shown by Proxmox when the token is created.",
-        "fr": "Identifiant complet du jeton, sous la forme utilisateur@realm!nomdujeton, tel qu'affiché par Proxmox à la création."
+        "fr": "Identifiant complet du jeton, sous la forme utilisateur@realm!nomdujeton, tel qu'affiché par Proxmox à la création.",
+        "de": "Vollständige Token-ID in der Form user@realm!tokenname, wie Proxmox sie beim Erstellen des Tokens anzeigt.",
+        "es": "ID completo del token, con la forma user@realm!tokenname, tal como lo muestra Proxmox al crear el token."
       },
       "placeholder": {
         "en": "gladys@pve!tasks",
-        "fr": "gladys@pve!tasks"
+        "fr": "gladys@pve!tasks",
+        "de": "gladys@pve!tasks",
+        "es": "gladys@pve!tasks"
       },
       "required": true
     },
@@ -113,11 +145,15 @@
       "type": "secret",
       "label": {
         "en": "API token secret",
-        "fr": "Secret du jeton d'API"
+        "fr": "Secret du jeton d'API",
+        "de": "API-Token-Secret",
+        "es": "Secreto del token de API"
       },
       "description": {
         "en": "The secret value Proxmox shows ONCE when the token is created. Stored encrypted by Gladys and never sent back to the browser.",
-        "fr": "La valeur secrète affichée UNE SEULE FOIS par Proxmox à la création du jeton. Stockée chiffrée par Gladys et jamais renvoyée au navigateur."
+        "fr": "La valeur secrète affichée UNE SEULE FOIS par Proxmox à la création du jeton. Stockée chiffrée par Gladys et jamais renvoyée au navigateur.",
+        "de": "Der geheime Wert, den Proxmox beim Erstellen des Tokens EINMAL anzeigt. Wird von Gladys verschlüsselt gespeichert und nie an den Browser zurückgesendet.",
+        "es": "El valor secreto que Proxmox muestra UNA SOLA VEZ al crear el token. Gladys lo guarda cifrado y nunca lo devuelve al navegador."
       },
       "required": true
     },
@@ -126,15 +162,21 @@
       "type": "string",
       "label": {
         "en": "TLS certificate fingerprint",
-        "fr": "Empreinte du certificat TLS"
+        "fr": "Empreinte du certificat TLS",
+        "de": "Fingerabdruck des TLS-Zertifikats",
+        "es": "Huella del certificado TLS"
       },
       "description": {
         "en": "Recommended with the default self-signed Proxmox certificate: pin its SHA-256 fingerprint (Datacenter > Certificates > pveproxy-ssl.pem). Leave empty when the node serves a certificate signed by a public CA.",
-        "fr": "Recommandé avec le certificat auto-signé Proxmox par défaut : épinglez son empreinte SHA-256 (Datacenter > Certificats > pveproxy-ssl.pem). Laissez vide si le nœud présente un certificat signé par une AC publique."
+        "fr": "Recommandé avec le certificat auto-signé Proxmox par défaut : épinglez son empreinte SHA-256 (Datacenter > Certificats > pveproxy-ssl.pem). Laissez vide si le nœud présente un certificat signé par une AC publique.",
+        "de": "Empfohlen beim standardmäßigen selbstsignierten Proxmox-Zertifikat: Pinnen Sie seinen SHA-256-Fingerabdruck (Datacenter > Zertifikate > pveproxy-ssl.pem). Leer lassen, wenn der Knoten ein von einer öffentlichen CA signiertes Zertifikat ausliefert.",
+        "es": "Recomendado con el certificado autofirmado predeterminado de Proxmox: fije su huella SHA-256 (Datacenter > Certificados > pveproxy-ssl.pem). Déjelo vacío si el nodo presenta un certificado firmado por una CA pública."
       },
       "placeholder": {
         "en": "AA:BB:CC:...:FF",
-        "fr": "AA:BB:CC:...:FF"
+        "fr": "AA:BB:CC:...:FF",
+        "de": "AA:BB:CC:...:FF",
+        "es": "AA:BB:CC:...:FF"
       },
       "required": false
     },
@@ -143,11 +185,15 @@
       "type": "boolean",
       "label": {
         "en": "Verify the TLS certificate",
-        "fr": "Vérifier le certificat TLS"
+        "fr": "Vérifier le certificat TLS",
+        "de": "TLS-Zertifikat prüfen",
+        "es": "Verificar el certificado TLS"
       },
       "description": {
         "en": "Turn OFF only as a last resort, on a trusted LAN: the connection stays encrypted but nothing proves the server is the real one. Pinning the fingerprint above is the safe way to accept a self-signed certificate.",
-        "fr": "À désactiver en dernier recours seulement, sur un réseau local de confiance : la connexion reste chiffrée mais rien ne prouve l'identité du serveur. Épingler l'empreinte ci-dessus est la façon sûre d'accepter un certificat auto-signé."
+        "fr": "À désactiver en dernier recours seulement, sur un réseau local de confiance : la connexion reste chiffrée mais rien ne prouve l'identité du serveur. Épingler l'empreinte ci-dessus est la façon sûre d'accepter un certificat auto-signé.",
+        "de": "Nur als letzten Ausweg AUSSCHALTEN, in einem vertrauenswürdigen LAN: Die Verbindung bleibt verschlüsselt, aber nichts beweist, dass der Server der echte ist. Den Fingerabdruck oben zu pinnen ist der sichere Weg, ein selbstsigniertes Zertifikat zu akzeptieren.",
+        "es": "DESACTÍVELO solo como último recurso, en una LAN de confianza: la conexión sigue cifrada, pero nada demuestra que el servidor sea el auténtico. Fijar la huella de arriba es la forma segura de aceptar un certificado autofirmado."
       },
       "required": false,
       "default": true
@@ -157,15 +203,21 @@
       "type": "string",
       "label": {
         "en": "Nodes to monitor",
-        "fr": "Nœuds à surveiller"
+        "fr": "Nœuds à surveiller",
+        "de": "Zu überwachende Knoten",
+        "es": "Nodos que supervisar"
       },
       "description": {
         "en": "Comma-separated node names. Leave empty to monitor every node the token can see. VMs and LXC are filtered the same way: only the guests running on those nodes are reported.",
-        "fr": "Noms de nœuds séparés par des virgules. Laissez vide pour surveiller tous les nœuds visibles par le jeton. Les VM et LXC sont filtrées de la même façon : seuls les invités hébergés par ces nœuds sont remontés."
+        "fr": "Noms de nœuds séparés par des virgules. Laissez vide pour surveiller tous les nœuds visibles par le jeton. Les VM et LXC sont filtrées de la même façon : seuls les invités hébergés par ces nœuds sont remontés.",
+        "de": "Durch Kommas getrennte Knotennamen. Leer lassen, um jeden Knoten zu überwachen, den das Token sieht. VMs und LXC werden genauso gefiltert: Nur die Gäste, die auf diesen Knoten laufen, werden gemeldet.",
+        "es": "Nombres de nodos separados por comas. Déjelo vacío para supervisar todos los nodos que el token pueda ver. Las VM y los LXC se filtran igual: solo se informa de los invitados que se ejecutan en esos nodos."
       },
       "placeholder": {
         "en": "pve1, pve2",
-        "fr": "pve1, pve2"
+        "fr": "pve1, pve2",
+        "de": "pve1, pve2",
+        "es": "pve1, pve2"
       },
       "required": false
     },
@@ -174,11 +226,15 @@
       "type": "section",
       "label": {
         "en": "Second Proxmox server (optional)",
-        "fr": "Second serveur Proxmox (optionnel)"
+        "fr": "Second serveur Proxmox (optionnel)",
+        "de": "Zweiter Proxmox-Server (optional)",
+        "es": "Segundo servidor Proxmox (opcional)"
       },
       "description": {
         "en": "Leave this block empty if you only have one Proxmox. Filled in, it monitors a second, fully independent server: its own host, its own API token and its own TLS settings, read the same way and needing the same PVEAuditor privileges. Its nodes and its VMs/LXC show up as their own Gladys devices, so a node called pve on both servers stays two distinct devices.",
-        "fr": "Laissez ce bloc vide si vous n'avez qu'un seul Proxmox. Renseigné, il surveille un second serveur totalement indépendant : son propre hôte, son propre jeton d'API et ses propres réglages TLS, lus de la même façon et nécessitant les mêmes droits PVEAuditor. Ses nœuds et ses VM/LXC apparaissent comme des appareils Gladys distincts : un nœud nommé pve présent sur les deux serveurs reste deux appareils."
+        "fr": "Laissez ce bloc vide si vous n'avez qu'un seul Proxmox. Renseigné, il surveille un second serveur totalement indépendant : son propre hôte, son propre jeton d'API et ses propres réglages TLS, lus de la même façon et nécessitant les mêmes droits PVEAuditor. Ses nœuds et ses VM/LXC apparaissent comme des appareils Gladys distincts : un nœud nommé pve présent sur les deux serveurs reste deux appareils.",
+        "de": "Lassen Sie diesen Block leer, wenn Sie nur einen Proxmox haben. Ausgefüllt überwacht er einen zweiten, völlig unabhängigen Server: eigener Host, eigenes API-Token und eigene TLS-Einstellungen, auf dieselbe Weise gelesen und mit denselben PVEAuditor-Rechten. Seine Knoten und seine VMs/LXC erscheinen als eigene Gladys-Geräte, sodass ein Knoten namens pve auf beiden Servern zwei getrennte Geräte bleibt.",
+        "es": "Deje este bloque vacío si solo tiene un Proxmox. Si lo rellena, supervisa un segundo servidor totalmente independiente: su propio host, su propio token de API y sus propios ajustes TLS, leído de la misma forma y con los mismos privilegios PVEAuditor. Sus nodos y sus VM/LXC aparecen como dispositivos de Gladys propios, de modo que un nodo llamado pve en ambos servidores sigue siendo dos dispositivos distintos."
       }
     },
     {
@@ -186,15 +242,21 @@
       "type": "string",
       "label": {
         "en": "Name of this Proxmox",
-        "fr": "Nom de ce Proxmox"
+        "fr": "Nom de ce Proxmox",
+        "de": "Name dieses Proxmox",
+        "es": "Nombre de este Proxmox"
       },
       "description": {
         "en": "Prefixes the name of every device of this server, e.g. \"Proxmox 2 pve1\". Leave empty to use \"Proxmox 2\". Renaming it here does not rename the devices Gladys already created.",
-        "fr": "Préfixe le nom de chaque appareil de ce serveur, par exemple « Proxmox 2 pve1 ». Laissez vide pour utiliser « Proxmox 2 ». Le renommer ici ne renomme pas les appareils déjà créés par Gladys."
+        "fr": "Préfixe le nom de chaque appareil de ce serveur, par exemple « Proxmox 2 pve1 ». Laissez vide pour utiliser « Proxmox 2 ». Le renommer ici ne renomme pas les appareils déjà créés par Gladys.",
+        "de": "Wird dem Namen jedes Geräts dieses Servers vorangestellt, z. B. „Proxmox 2 pve1“. Leer lassen, um „Proxmox 2“ zu verwenden. Eine Umbenennung hier benennt die Geräte, die Gladys bereits angelegt hat, nicht um.",
+        "es": "Se antepone al nombre de cada dispositivo de este servidor, p. ej. \"Proxmox 2 pve1\". Déjelo vacío para usar \"Proxmox 2\". Cambiarlo aquí no renombra los dispositivos que Gladys ya ha creado."
       },
       "placeholder": {
         "en": "Proxmox 2",
-        "fr": "Proxmox 2"
+        "fr": "Proxmox 2",
+        "de": "Proxmox 2",
+        "es": "Proxmox 2"
       },
       "required": false
     },
@@ -203,15 +265,21 @@
       "type": "string",
       "label": {
         "en": "Proxmox host",
-        "fr": "Hôte Proxmox"
+        "fr": "Hôte Proxmox",
+        "de": "Proxmox-Host",
+        "es": "Host de Proxmox"
       },
       "description": {
         "en": "IP address or hostname of a node of the SECOND Proxmox VE installation. Leave empty if you only have one.",
-        "fr": "Adresse IP ou nom d'hôte d'un nœud de la SECONDE installation Proxmox VE. Laissez vide si vous n'en avez qu'une."
+        "fr": "Adresse IP ou nom d'hôte d'un nœud de la SECONDE installation Proxmox VE. Laissez vide si vous n'en avez qu'une.",
+        "de": "IP-Adresse oder Hostname eines Knotens der ZWEITEN Proxmox-VE-Installation. Leer lassen, wenn Sie nur eine haben.",
+        "es": "Dirección IP o nombre de host de un nodo de la SEGUNDA instalación de Proxmox VE. Déjelo vacío si solo tiene una."
       },
       "placeholder": {
         "en": "192.168.1.10",
-        "fr": "192.168.1.10"
+        "fr": "192.168.1.10",
+        "de": "192.168.1.10",
+        "es": "192.168.1.10"
       },
       "required": false
     },
@@ -220,11 +288,15 @@
       "type": "number",
       "label": {
         "en": "API port",
-        "fr": "Port de l'API"
+        "fr": "Port de l'API",
+        "de": "API-Port",
+        "es": "Puerto de la API"
       },
       "description": {
         "en": "HTTPS port of the Proxmox VE API. The default Proxmox port is 8006.",
-        "fr": "Port HTTPS de l'API Proxmox VE. Le port Proxmox par défaut est 8006."
+        "fr": "Port HTTPS de l'API Proxmox VE. Le port Proxmox par défaut est 8006.",
+        "de": "HTTPS-Port der Proxmox-VE-API. Der Standardport von Proxmox ist 8006.",
+        "es": "Puerto HTTPS de la API de Proxmox VE. El puerto predeterminado de Proxmox es 8006."
       },
       "required": false,
       "default": 8006,
@@ -236,15 +308,21 @@
       "type": "string",
       "label": {
         "en": "API token ID",
-        "fr": "Identifiant du jeton d'API"
+        "fr": "Identifiant du jeton d'API",
+        "de": "API-Token-ID",
+        "es": "ID del token de API"
       },
       "description": {
         "en": "Full token id of the second server, in the user@realm!tokenname form.",
-        "fr": "Identifiant complet du jeton du second serveur, sous la forme utilisateur@realm!nomdujeton."
+        "fr": "Identifiant complet du jeton du second serveur, sous la forme utilisateur@realm!nomdujeton.",
+        "de": "Vollständige Token-ID des zweiten Servers in der Form user@realm!tokenname.",
+        "es": "ID completo del token del segundo servidor, con la forma user@realm!tokenname."
       },
       "placeholder": {
         "en": "gladys@pve!tasks",
-        "fr": "gladys@pve!tasks"
+        "fr": "gladys@pve!tasks",
+        "de": "gladys@pve!tasks",
+        "es": "gladys@pve!tasks"
       },
       "required": false
     },
@@ -253,11 +331,15 @@
       "type": "secret",
       "label": {
         "en": "API token secret",
-        "fr": "Secret du jeton d'API"
+        "fr": "Secret du jeton d'API",
+        "de": "API-Token-Secret",
+        "es": "Secreto del token de API"
       },
       "description": {
         "en": "The secret value the second Proxmox shows ONCE when the token is created. Stored encrypted by Gladys and never sent back to the browser.",
-        "fr": "La valeur secrète affichée UNE SEULE FOIS par le second Proxmox à la création du jeton. Stockée chiffrée par Gladys et jamais renvoyée au navigateur."
+        "fr": "La valeur secrète affichée UNE SEULE FOIS par le second Proxmox à la création du jeton. Stockée chiffrée par Gladys et jamais renvoyée au navigateur.",
+        "de": "Der geheime Wert, den der zweite Proxmox beim Erstellen des Tokens EINMAL anzeigt. Wird von Gladys verschlüsselt gespeichert und nie an den Browser zurückgesendet.",
+        "es": "El valor secreto que el segundo Proxmox muestra UNA SOLA VEZ al crear el token. Gladys lo guarda cifrado y nunca lo devuelve al navegador."
       },
       "required": false
     },
@@ -266,15 +348,21 @@
       "type": "string",
       "label": {
         "en": "TLS certificate fingerprint",
-        "fr": "Empreinte du certificat TLS"
+        "fr": "Empreinte du certificat TLS",
+        "de": "Fingerabdruck des TLS-Zertifikats",
+        "es": "Huella del certificado TLS"
       },
       "description": {
         "en": "Recommended with the default self-signed Proxmox certificate: pin its SHA-256 fingerprint (Datacenter > Certificates > pveproxy-ssl.pem). Leave empty when the node serves a certificate signed by a public CA.",
-        "fr": "Recommandé avec le certificat auto-signé Proxmox par défaut : épinglez son empreinte SHA-256 (Datacenter > Certificats > pveproxy-ssl.pem). Laissez vide si le nœud présente un certificat signé par une AC publique."
+        "fr": "Recommandé avec le certificat auto-signé Proxmox par défaut : épinglez son empreinte SHA-256 (Datacenter > Certificats > pveproxy-ssl.pem). Laissez vide si le nœud présente un certificat signé par une AC publique.",
+        "de": "Empfohlen beim standardmäßigen selbstsignierten Proxmox-Zertifikat: Pinnen Sie seinen SHA-256-Fingerabdruck (Datacenter > Zertifikate > pveproxy-ssl.pem). Leer lassen, wenn der Knoten ein von einer öffentlichen CA signiertes Zertifikat ausliefert.",
+        "es": "Recomendado con el certificado autofirmado predeterminado de Proxmox: fije su huella SHA-256 (Datacenter > Certificados > pveproxy-ssl.pem). Déjelo vacío si el nodo presenta un certificado firmado por una CA pública."
       },
       "placeholder": {
         "en": "AA:BB:CC:...:FF",
-        "fr": "AA:BB:CC:...:FF"
+        "fr": "AA:BB:CC:...:FF",
+        "de": "AA:BB:CC:...:FF",
+        "es": "AA:BB:CC:...:FF"
       },
       "required": false
     },
@@ -283,11 +371,15 @@
       "type": "boolean",
       "label": {
         "en": "Verify the TLS certificate",
-        "fr": "Vérifier le certificat TLS"
+        "fr": "Vérifier le certificat TLS",
+        "de": "TLS-Zertifikat prüfen",
+        "es": "Verificar el certificado TLS"
       },
       "description": {
         "en": "Turn OFF only as a last resort, on a trusted LAN: the connection stays encrypted but nothing proves the server is the real one. Pinning the fingerprint above is the safe way to accept a self-signed certificate.",
-        "fr": "À désactiver en dernier recours seulement, sur un réseau local de confiance : la connexion reste chiffrée mais rien ne prouve l'identité du serveur. Épingler l'empreinte ci-dessus est la façon sûre d'accepter un certificat auto-signé."
+        "fr": "À désactiver en dernier recours seulement, sur un réseau local de confiance : la connexion reste chiffrée mais rien ne prouve l'identité du serveur. Épingler l'empreinte ci-dessus est la façon sûre d'accepter un certificat auto-signé.",
+        "de": "Nur als letzten Ausweg AUSSCHALTEN, in einem vertrauenswürdigen LAN: Die Verbindung bleibt verschlüsselt, aber nichts beweist, dass der Server der echte ist. Den Fingerabdruck oben zu pinnen ist der sichere Weg, ein selbstsigniertes Zertifikat zu akzeptieren.",
+        "es": "DESACTÍVELO solo como último recurso, en una LAN de confianza: la conexión sigue cifrada, pero nada demuestra que el servidor sea el auténtico. Fijar la huella de arriba es la forma segura de aceptar un certificado autofirmado."
       },
       "required": false,
       "default": true
@@ -297,15 +389,21 @@
       "type": "string",
       "label": {
         "en": "Nodes to monitor",
-        "fr": "Nœuds à surveiller"
+        "fr": "Nœuds à surveiller",
+        "de": "Zu überwachende Knoten",
+        "es": "Nodos que supervisar"
       },
       "description": {
         "en": "Comma-separated node names. Leave empty to monitor every node the token can see. VMs and LXC are filtered the same way: only the guests running on those nodes are reported.",
-        "fr": "Noms de nœuds séparés par des virgules. Laissez vide pour surveiller tous les nœuds visibles par le jeton. Les VM et LXC sont filtrées de la même façon : seuls les invités hébergés par ces nœuds sont remontés."
+        "fr": "Noms de nœuds séparés par des virgules. Laissez vide pour surveiller tous les nœuds visibles par le jeton. Les VM et LXC sont filtrées de la même façon : seuls les invités hébergés par ces nœuds sont remontés.",
+        "de": "Durch Kommas getrennte Knotennamen. Leer lassen, um jeden Knoten zu überwachen, den das Token sieht. VMs und LXC werden genauso gefiltert: Nur die Gäste, die auf diesen Knoten laufen, werden gemeldet.",
+        "es": "Nombres de nodos separados por comas. Déjelo vacío para supervisar todos los nodos que el token pueda ver. Las VM y los LXC se filtran igual: solo se informa de los invitados que se ejecutan en esos nodos."
       },
       "placeholder": {
         "en": "pve1, pve2",
-        "fr": "pve1, pve2"
+        "fr": "pve1, pve2",
+        "de": "pve1, pve2",
+        "es": "pve1, pve2"
       },
       "required": false
     },
@@ -314,11 +412,15 @@
       "type": "section",
       "label": {
         "en": "Backups and display",
-        "fr": "Sauvegardes et affichage"
+        "fr": "Sauvegardes et affichage",
+        "de": "Backups und Anzeige",
+        "es": "Copias de seguridad y visualización"
       },
       "description": {
         "en": "These settings apply to every configured Proxmox server.",
-        "fr": "Ces réglages s’appliquent à tous les serveurs Proxmox configurés."
+        "fr": "Ces réglages s’appliquent à tous les serveurs Proxmox configurés.",
+        "de": "Diese Einstellungen gelten für jeden konfigurierten Proxmox-Server.",
+        "es": "Estos ajustes se aplican a todos los servidores Proxmox configurados."
       }
     },
     {
@@ -326,11 +428,15 @@
       "type": "number",
       "label": {
         "en": "How far back to look for a backup (days)",
-        "fr": "Ancienneté maximale d'une sauvegarde recherchée (jours)"
+        "fr": "Ancienneté maximale d'une sauvegarde recherchée (jours)",
+        "de": "Wie weit zurück nach einem Backup gesucht wird (Tage)",
+        "es": "Cuántos días atrás buscar una copia de seguridad"
       },
       "description": {
         "en": "The last backup is looked for inside this window. A node with no backup in it reads \"unknown\" on \"Last backup\" and \"Backup status\", and publishes no duration at all. Raise it if your backup jobs run less often than that.",
-        "fr": "La dernière sauvegarde est recherchée dans cette fenêtre. Un nœud sans sauvegarde dedans affiche « unknown » sur « Last backup » et « Backup status », et ne publie aucune durée. Augmentez-la si vos travaux de sauvegarde sont plus espacés."
+        "fr": "La dernière sauvegarde est recherchée dans cette fenêtre. Un nœud sans sauvegarde dedans affiche « unknown » sur « Last backup » et « Backup status », et ne publie aucune durée. Augmentez-la si vos travaux de sauvegarde sont plus espacés.",
+        "de": "Das letzte Backup wird innerhalb dieses Zeitfensters gesucht. Ein Knoten ohne Backup darin zeigt „unknown“ bei „Last backup“ und „Backup status“ an und veröffentlicht überhaupt keine Dauer. Erhöhen Sie den Wert, wenn Ihre Backup-Jobs seltener laufen.",
+        "es": "La última copia de seguridad se busca dentro de este periodo. Un nodo sin ninguna copia en él muestra \"unknown\" en \"Last backup\" y \"Backup status\", y no publica ninguna duración. Auméntelo si sus trabajos de copia se ejecutan con menos frecuencia."
       },
       "required": false,
       "default": 7,
@@ -342,11 +448,15 @@
       "type": "select",
       "label": {
         "en": "What counts as a successful backup",
-        "fr": "Ce qui compte comme une sauvegarde réussie"
+        "fr": "Ce qui compte comme une sauvegarde réussie",
+        "de": "Was als erfolgreiches Backup gilt",
+        "es": "Qué cuenta como copia de seguridad correcta"
       },
       "description": {
         "en": "Proxmox marks a finished backup OK, WARNINGS: n (it completed but skipped something), or with an error string. Choose whether a backup that ended with warnings still reads \"OK\" on the \"Backup status\" feature, or \"failed — WARNINGS: n\".",
-        "fr": "Proxmox marque une sauvegarde terminée OK, WARNINGS: n (terminée mais avec des éléments ignorés), ou avec un message d'erreur. Choisissez si une sauvegarde terminée avec des avertissements affiche quand même « OK » sur la fonctionnalité « Backup status », ou « failed — WARNINGS: n »."
+        "fr": "Proxmox marque une sauvegarde terminée OK, WARNINGS: n (terminée mais avec des éléments ignorés), ou avec un message d'erreur. Choisissez si une sauvegarde terminée avec des avertissements affiche quand même « OK » sur la fonctionnalité « Backup status », ou « failed — WARNINGS: n ».",
+        "de": "Proxmox markiert ein abgeschlossenes Backup mit OK, WARNINGS: n (abgeschlossen, aber etwas wurde übersprungen) oder mit einer Fehlermeldung. Wählen Sie, ob ein mit Warnungen beendetes Backup in der Funktion „Backup status“ weiterhin „OK“ anzeigt oder „failed — WARNINGS: n“.",
+        "es": "Proxmox marca una copia terminada como OK, WARNINGS: n (se completó pero omitió algo) o con un mensaje de error. Elija si una copia que terminó con advertencias sigue mostrando \"OK\" en la función \"Backup status\" o \"failed — WARNINGS: n\"."
       },
       "required": false,
       "default": "ok_only",
@@ -355,14 +465,18 @@
           "value": "ok_only",
           "label": {
             "en": "OK only",
-            "fr": "OK uniquement"
+            "fr": "OK uniquement",
+            "de": "Nur OK",
+            "es": "Solo OK"
           }
         },
         {
           "value": "ok_and_warnings",
           "label": {
             "en": "OK and warnings",
-            "fr": "OK et avertissements"
+            "fr": "OK et avertissements",
+            "de": "OK und Warnungen",
+            "es": "OK y advertencias"
           }
         }
       ]
@@ -372,15 +486,21 @@
       "type": "string",
       "label": {
         "en": "Time zone",
-        "fr": "Fuseau horaire"
+        "fr": "Fuseau horaire",
+        "de": "Zeitzone",
+        "es": "Zona horaria"
       },
       "description": {
         "en": "IANA time zone used to render the \"Last backup\" timestamp (Europe/Paris, America/New_York...). Leave empty to use the time zone of the Gladys host.",
-        "fr": "Fuseau horaire IANA utilisé pour afficher l'horodatage « Last backup » (Europe/Paris, America/New_York...). Laissez vide pour utiliser celui de l'hôte Gladys."
+        "fr": "Fuseau horaire IANA utilisé pour afficher l'horodatage « Last backup » (Europe/Paris, America/New_York...). Laissez vide pour utiliser celui de l'hôte Gladys.",
+        "de": "IANA-Zeitzone für die Anzeige des Zeitstempels „Last backup“ (Europe/Paris, America/New_York...). Leer lassen, um die Zeitzone des Gladys-Hosts zu verwenden.",
+        "es": "Zona horaria IANA usada para mostrar la marca de tiempo de \"Last backup\" (Europe/Paris, America/New_York...). Déjelo vacío para usar la zona horaria del host de Gladys."
       },
       "placeholder": {
         "en": "Europe/Paris",
-        "fr": "Europe/Paris"
+        "fr": "Europe/Paris",
+        "de": "Europe/Paris",
+        "es": "Europe/Paris"
       },
       "required": false
     },
@@ -389,11 +509,15 @@
       "type": "select",
       "label": {
         "en": "Date format",
-        "fr": "Format de date"
+        "fr": "Format de date",
+        "de": "Datumsformat",
+        "es": "Formato de fecha"
       },
       "description": {
         "en": "How the \"Last backup\" timestamp is written. The time is always shown on a 24-hour clock, in the time zone above — which is only printed on the tile if you pick the last option.",
-        "fr": "Façon d'écrire l'horodatage « Last backup ». L'heure est toujours affichée sur 24 heures, dans le fuseau ci-dessus — qui n'est indiqué sur la tuile que si vous choisissez la dernière option."
+        "fr": "Façon d'écrire l'horodatage « Last backup ». L'heure est toujours affichée sur 24 heures, dans le fuseau ci-dessus — qui n'est indiqué sur la tuile que si vous choisissez la dernière option.",
+        "de": "Wie der Zeitstempel „Last backup“ geschrieben wird. Die Uhrzeit wird immer im 24-Stunden-Format angezeigt, in der obigen Zeitzone — die nur dann auf der Kachel erscheint, wenn Sie die letzte Option wählen.",
+        "es": "Cómo se escribe la marca de tiempo de \"Last backup\". La hora se muestra siempre en formato de 24 horas, en la zona horaria de arriba, que solo aparece en el recuadro si elige la última opción."
       },
       "required": false,
       "default": "day_month_year",
@@ -402,28 +526,36 @@
           "value": "day_month_year",
           "label": {
             "en": "16/08/2026 11:25:04 (day/month/year)",
-            "fr": "16/08/2026 11:25:04 (jour/mois/année)"
+            "fr": "16/08/2026 11:25:04 (jour/mois/année)",
+            "de": "16/08/2026 11:25:04 (Tag/Monat/Jahr)",
+            "es": "16/08/2026 11:25:04 (día/mes/año)"
           }
         },
         {
           "value": "month_day_year",
           "label": {
             "en": "08/16/2026 11:25:04 (month/day/year)",
-            "fr": "08/16/2026 11:25:04 (mois/jour/année)"
+            "fr": "08/16/2026 11:25:04 (mois/jour/année)",
+            "de": "08/16/2026 11:25:04 (Monat/Tag/Jahr)",
+            "es": "08/16/2026 11:25:04 (mes/día/año)"
           }
         },
         {
           "value": "year_month_day",
           "label": {
             "en": "2026-08-16 11:25:04 (ISO)",
-            "fr": "2026-08-16 11:25:04 (ISO)"
+            "fr": "2026-08-16 11:25:04 (ISO)",
+            "de": "2026-08-16 11:25:04 (ISO)",
+            "es": "2026-08-16 11:25:04 (ISO)"
           }
         },
         {
           "value": "year_month_day_timezone",
           "label": {
             "en": "2026-08-16 11:25:04 (Europe/Paris) — with the time zone",
-            "fr": "2026-08-16 11:25:04 (Europe/Paris) — avec le fuseau horaire"
+            "fr": "2026-08-16 11:25:04 (Europe/Paris) — avec le fuseau horaire",
+            "de": "2026-08-16 11:25:04 (Europe/Paris) — mit der Zeitzone",
+            "es": "2026-08-16 11:25:04 (Europe/Paris) — con la zona horaria"
           }
         }
       ]
@@ -433,11 +565,15 @@
       "type": "select",
       "label": {
         "en": "Disk monitoring (SMART)",
-        "fr": "Surveillance des disques (SMART)"
+        "fr": "Surveillance des disques (SMART)",
+        "de": "Festplattenüberwachung (SMART)",
+        "es": "Supervisión de discos (SMART)"
       },
       "description": {
         "en": "Adds a \"SMART status\" feature to every node, and one temperature sensor per physical disk. Reading the health costs one request per node; the temperatures cost one more per disk, each running a smartctl on the Proxmox side. Needs Sys.Audit on /nodes, like the backups. Add or replace a disk? Re-run a scan so its sensor appears.",
-        "fr": "Ajoute une fonctionnalité « SMART status » à chaque nœud, et un capteur de température par disque physique. Lire la santé coûte une requête par nœud ; les températures une de plus par disque, chacune exécutant un smartctl côté Proxmox. Nécessite Sys.Audit sur /nodes, comme les sauvegardes. Disque ajouté ou remplacé ? Relancez une recherche pour voir son capteur."
+        "fr": "Ajoute une fonctionnalité « SMART status » à chaque nœud, et un capteur de température par disque physique. Lire la santé coûte une requête par nœud ; les températures une de plus par disque, chacune exécutant un smartctl côté Proxmox. Nécessite Sys.Audit sur /nodes, comme les sauvegardes. Disque ajouté ou remplacé ? Relancez une recherche pour voir son capteur.",
+        "de": "Fügt jedem Knoten eine Funktion „SMART status“ und pro physischer Festplatte einen Temperatursensor hinzu. Das Lesen des Zustands kostet eine Anfrage pro Knoten; die Temperaturen kosten eine weitere pro Festplatte, die jeweils ein smartctl auf der Proxmox-Seite ausführt. Erfordert Sys.Audit auf /nodes, wie die Backups. Festplatte hinzugefügt oder ersetzt? Starten Sie erneut einen Scan, damit ihr Sensor erscheint.",
+        "es": "Añade una función \"SMART status\" a cada nodo y un sensor de temperatura por disco físico. Leer el estado cuesta una petición por nodo; las temperaturas cuestan una más por disco, y cada una ejecuta un smartctl en el lado de Proxmox. Requiere Sys.Audit en /nodes, como las copias de seguridad. ¿Ha añadido o sustituido un disco? Vuelva a lanzar una búsqueda para que aparezca su sensor."
       },
       "required": false,
       "default": "smart_and_temperature",
@@ -446,21 +582,27 @@
           "value": "smart_and_temperature",
           "label": {
             "en": "SMART status and temperatures",
-            "fr": "État SMART et températures"
+            "fr": "État SMART et températures",
+            "de": "SMART-Status und Temperaturen",
+            "es": "Estado SMART y temperaturas"
           }
         },
         {
           "value": "smart",
           "label": {
             "en": "SMART status only",
-            "fr": "État SMART uniquement"
+            "fr": "État SMART uniquement",
+            "de": "Nur SMART-Status",
+            "es": "Solo estado SMART"
           }
         },
         {
           "value": "off",
           "label": {
             "en": "Off",
-            "fr": "Désactivé"
+            "fr": "Désactivé",
+            "de": "Aus",
+            "es": "Desactivado"
           }
         }
       ]
@@ -470,11 +612,15 @@
       "type": "number",
       "label": {
         "en": "Refresh interval (s)",
-        "fr": "Intervalle de rafraîchissement (s)"
+        "fr": "Intervalle de rafraîchissement (s)",
+        "de": "Aktualisierungsintervall (s)",
+        "es": "Intervalo de actualización (s)"
       },
       "description": {
         "en": "How often Proxmox is read, in seconds.",
-        "fr": "Fréquence de lecture de Proxmox, en secondes."
+        "fr": "Fréquence de lecture de Proxmox, en secondes.",
+        "de": "Wie oft Proxmox gelesen wird, in Sekunden.",
+        "es": "Con qué frecuencia se lee Proxmox, en segundos."
       },
       "required": false,
       "default": 300,
@@ -487,11 +633,15 @@
       "key": "test_connection",
       "label": {
         "en": "Test the connection",
-        "fr": "Tester la connexion"
+        "fr": "Tester la connexion",
+        "de": "Verbindung testen",
+        "es": "Probar la conexión"
       },
       "description": {
         "en": "Checks the host, the API token and the read-only permissions, node by node, and counts the visible VMs/LXC — on every configured server.",
-        "fr": "Vérifie l'hôte, le jeton d'API et les droits en lecture seule, nœud par nœud, et compte les VM/LXC visibles — sur chaque serveur configuré."
+        "fr": "Vérifie l'hôte, le jeton d'API et les droits en lecture seule, nœud par nœud, et compte les VM/LXC visibles — sur chaque serveur configuré.",
+        "de": "Prüft den Host, das API-Token und die Leserechte Knoten für Knoten und zählt die sichtbaren VMs/LXC — auf jedem konfigurierten Server.",
+        "es": "Comprueba el host, el token de API y los permisos de solo lectura, nodo por nodo, y cuenta las VM/LXC visibles, en cada servidor configurado."
       },
       "timeout_seconds": 60
     },
@@ -499,11 +649,15 @@
       "key": "refresh_now",
       "label": {
         "en": "Refresh now",
-        "fr": "Rafraîchir maintenant"
+        "fr": "Rafraîchir maintenant",
+        "de": "Jetzt aktualisieren",
+        "es": "Actualizar ahora"
       },
       "description": {
         "en": "Reads the backups and the VM/LXC states immediately instead of waiting for the next refresh.",
-        "fr": "Lit les sauvegardes et l'état des VM/LXC immédiatement au lieu d'attendre le prochain rafraîchissement."
+        "fr": "Lit les sauvegardes et l'état des VM/LXC immédiatement au lieu d'attendre le prochain rafraîchissement.",
+        "de": "Liest die Backups und die Zustände der VMs/LXC sofort, statt auf die nächste Aktualisierung zu warten.",
+        "es": "Lee las copias de seguridad y los estados de las VM/LXC de inmediato, sin esperar a la siguiente actualización."
       },
       "timeout_seconds": 90
     }
@@ -513,11 +667,15 @@
       "key": "backups",
       "label": {
         "en": "Proxmox backups",
-        "fr": "Sauvegardes Proxmox"
+        "fr": "Sauvegardes Proxmox",
+        "de": "Proxmox-Backups",
+        "es": "Copias de seguridad Proxmox"
       },
       "description": {
         "en": "Last backup of every node, failures first.",
-        "fr": "Dernière sauvegarde de chaque nœud, les échecs en premier."
+        "fr": "Dernière sauvegarde de chaque nœud, les échecs en premier.",
+        "de": "Letztes Backup jedes Knotens, Fehlschläge zuerst.",
+        "es": "Última copia de seguridad de cada nodo, primero los fallos."
       },
       "icon": "archive",
       "action_timeout_seconds": 90
@@ -526,11 +684,15 @@
       "key": "guests",
       "label": {
         "en": "Proxmox VM/LXC",
-        "fr": "VM/LXC Proxmox"
+        "fr": "VM/LXC Proxmox",
+        "de": "Proxmox VM/LXC",
+        "es": "Proxmox VM/LXC"
       },
       "description": {
         "en": "State of every VM and LXC, the ones not running first.",
-        "fr": "État de chaque VM et LXC, celles qui ne tournent pas en premier."
+        "fr": "État de chaque VM et LXC, celles qui ne tournent pas en premier.",
+        "de": "Zustand jeder VM und jedes LXC, nicht laufende zuerst.",
+        "es": "Estado de cada VM y LXC, primero los que no están en ejecución."
       },
       "icon": "server",
       "settings": [
@@ -539,7 +701,9 @@
           "type": "select",
           "label": {
             "en": "Show",
-            "fr": "Afficher"
+            "fr": "Afficher",
+            "de": "Anzeigen",
+            "es": "Mostrar"
           },
           "required": false,
           "default": "all",
@@ -548,14 +712,18 @@
               "value": "all",
               "label": {
                 "en": "Every VM/LXC",
-                "fr": "Toutes les VM/LXC"
+                "fr": "Toutes les VM/LXC",
+                "de": "Alle VMs/LXC",
+                "es": "Todas las VM/LXC"
               }
             },
             {
               "value": "not_running",
               "label": {
                 "en": "Only the ones not running",
-                "fr": "Seulement celles arrêtées"
+                "fr": "Seulement celles arrêtées",
+                "de": "Nur nicht laufende",
+                "es": "Solo las que no están en ejecución"
               }
             }
           ]
@@ -567,11 +735,15 @@
       "key": "node",
       "label": {
         "en": "Proxmox node",
-        "fr": "Nœud Proxmox"
+        "fr": "Nœud Proxmox",
+        "de": "Proxmox-Knoten",
+        "es": "Nodo Proxmox"
       },
       "description": {
         "en": "One node: backup, SMART, disk temperatures, backup durations.",
-        "fr": "Un nœud : sauvegarde, SMART, température des disques, durées."
+        "fr": "Un nœud : sauvegarde, SMART, température des disques, durées.",
+        "de": "Ein Knoten: Backup, SMART, Festplattentemperaturen, Backup-Dauern.",
+        "es": "Un nodo: copia de seguridad, SMART, temperaturas de los discos, duraciones de las copias."
       },
       "icon": "hard-drive",
       "settings": [
@@ -581,11 +753,15 @@
           "source": "devices",
           "label": {
             "en": "Proxmox node",
-            "fr": "Nœud Proxmox"
+            "fr": "Nœud Proxmox",
+            "de": "Proxmox-Knoten",
+            "es": "Nodo Proxmox"
           },
           "description": {
             "en": "Pick a node device, not a VM/LXC.",
-            "fr": "Choisissez un appareil nœud, pas une VM/LXC."
+            "fr": "Choisissez un appareil nœud, pas une VM/LXC.",
+            "de": "Wählen Sie ein Knotengerät, keine VM/LXC.",
+            "es": "Elija un dispositivo de nodo, no una VM/LXC."
           },
           "required": true
         }
@@ -598,11 +774,15 @@
       "key": "backup_finished",
       "label": {
         "en": "Proxmox backup finished",
-        "fr": "Sauvegarde Proxmox terminée"
+        "fr": "Sauvegarde Proxmox terminée",
+        "de": "Proxmox-Backup beendet",
+        "es": "Copia de seguridad Proxmox terminada"
       },
       "description": {
         "en": "A backup task (vzdump) of a node has ended, successfully or not.",
-        "fr": "Une tâche de sauvegarde (vzdump) d'un nœud s'est terminée, avec succès ou non."
+        "fr": "Une tâche de sauvegarde (vzdump) d'un nœud s'est terminée, avec succès ou non.",
+        "de": "Eine Backup-Aufgabe (vzdump) eines Knotens ist beendet, erfolgreich oder nicht.",
+        "es": "Una tarea de copia de seguridad (vzdump) de un nodo ha terminado, con éxito o no."
       },
       "fields": [
         {
@@ -611,11 +791,15 @@
           "source": "devices",
           "label": {
             "en": "Proxmox node",
-            "fr": "Nœud Proxmox"
+            "fr": "Nœud Proxmox",
+            "de": "Proxmox-Knoten",
+            "es": "Nodo Proxmox"
           },
           "description": {
             "en": "Leave empty for any node.",
-            "fr": "Laissez vide pour n'importe quel nœud."
+            "fr": "Laissez vide pour n'importe quel nœud.",
+            "de": "Leer lassen für jeden Knoten.",
+            "es": "Déjelo vacío para cualquier nodo."
           },
           "required": false
         },
@@ -624,11 +808,15 @@
           "type": "select",
           "label": {
             "en": "Result",
-            "fr": "Résultat"
+            "fr": "Résultat",
+            "de": "Ergebnis",
+            "es": "Resultado"
           },
           "description": {
             "en": "Leave empty for any result.",
-            "fr": "Laissez vide pour n'importe quel résultat."
+            "fr": "Laissez vide pour n'importe quel résultat.",
+            "de": "Leer lassen für jedes Ergebnis.",
+            "es": "Déjelo vacío para cualquier resultado."
           },
           "required": false,
           "options": [
@@ -636,14 +824,18 @@
               "value": "ok",
               "label": {
                 "en": "Succeeded",
-                "fr": "Réussie"
+                "fr": "Réussie",
+                "de": "Erfolgreich",
+                "es": "Correcta"
               }
             },
             {
               "value": "failed",
               "label": {
                 "en": "Failed",
-                "fr": "Échouée"
+                "fr": "Échouée",
+                "de": "Fehlgeschlagen",
+                "es": "Fallida"
               }
             }
           ]
@@ -655,7 +847,9 @@
           "type": "string",
           "label": {
             "en": "Node",
-            "fr": "Nœud"
+            "fr": "Nœud",
+            "de": "Knoten",
+            "es": "Nodo"
           }
         },
         {
@@ -663,7 +857,9 @@
           "type": "string",
           "label": {
             "en": "Proxmox server",
-            "fr": "Serveur Proxmox"
+            "fr": "Serveur Proxmox",
+            "de": "Proxmox-Server",
+            "es": "Servidor Proxmox"
           }
         },
         {
@@ -671,7 +867,9 @@
           "type": "string",
           "label": {
             "en": "Result (ok / failed)",
-            "fr": "Résultat (ok / failed)"
+            "fr": "Résultat (ok / failed)",
+            "de": "Ergebnis (ok / failed)",
+            "es": "Resultado (ok / failed)"
           }
         },
         {
@@ -679,7 +877,9 @@
           "type": "string",
           "label": {
             "en": "Backup status",
-            "fr": "Statut de la sauvegarde"
+            "fr": "Statut de la sauvegarde",
+            "de": "Backup-Status",
+            "es": "Estado de la copia de seguridad"
           }
         },
         {
@@ -687,7 +887,9 @@
           "type": "string",
           "label": {
             "en": "Started at",
-            "fr": "Début"
+            "fr": "Début",
+            "de": "Gestartet um",
+            "es": "Hora de inicio"
           }
         },
         {
@@ -695,7 +897,9 @@
           "type": "number",
           "label": {
             "en": "Duration (s)",
-            "fr": "Durée (s)"
+            "fr": "Durée (s)",
+            "de": "Dauer (s)",
+            "es": "Duración (s)"
           }
         }
       ]
@@ -704,11 +908,15 @@
       "key": "guest_status_changed",
       "label": {
         "en": "Proxmox VM/LXC state changed",
-        "fr": "État d'une VM/LXC Proxmox modifié"
+        "fr": "État d'une VM/LXC Proxmox modifié",
+        "de": "Zustand einer Proxmox-VM/LXC geändert",
+        "es": "Estado de una VM/LXC Proxmox cambiado"
       },
       "description": {
         "en": "A VM or an LXC went from one state to another (running, stopped...).",
-        "fr": "Une VM ou un LXC a changé d'état (running, stopped...)."
+        "fr": "Une VM ou un LXC a changé d'état (running, stopped...).",
+        "de": "Eine VM oder ein LXC ist von einem Zustand in einen anderen gewechselt (läuft, gestoppt...).",
+        "es": "Una VM o un LXC ha pasado de un estado a otro (en ejecución, detenida...)."
       },
       "fields": [
         {
@@ -717,11 +925,15 @@
           "source": "devices",
           "label": {
             "en": "VM or LXC",
-            "fr": "VM ou LXC"
+            "fr": "VM ou LXC",
+            "de": "VM oder LXC",
+            "es": "VM o LXC"
           },
           "description": {
             "en": "Leave empty for any VM/LXC.",
-            "fr": "Laissez vide pour n'importe quelle VM/LXC."
+            "fr": "Laissez vide pour n'importe quelle VM/LXC.",
+            "de": "Leer lassen für jede VM/LXC.",
+            "es": "Déjelo vacío para cualquier VM/LXC."
           },
           "required": false
         },
@@ -730,11 +942,15 @@
           "type": "multi_select",
           "label": {
             "en": "New state",
-            "fr": "Nouvel état"
+            "fr": "Nouvel état",
+            "de": "Neuer Zustand",
+            "es": "Nuevo estado"
           },
           "description": {
             "en": "Leave empty for any state.",
-            "fr": "Laissez vide pour n'importe quel état."
+            "fr": "Laissez vide pour n'importe quel état.",
+            "de": "Leer lassen für jeden Zustand.",
+            "es": "Déjelo vacío para cualquier estado."
           },
           "required": false,
           "options": [
@@ -742,28 +958,36 @@
               "value": "running",
               "label": {
                 "en": "Running",
-                "fr": "En marche (running)"
+                "fr": "En marche (running)",
+                "de": "Läuft",
+                "es": "En ejecución"
               }
             },
             {
               "value": "stopped",
               "label": {
                 "en": "Stopped",
-                "fr": "Arrêtée (stopped)"
+                "fr": "Arrêtée (stopped)",
+                "de": "Gestoppt",
+                "es": "Detenida"
               }
             },
             {
               "value": "paused",
               "label": {
                 "en": "Paused",
-                "fr": "En pause (paused)"
+                "fr": "En pause (paused)",
+                "de": "Pausiert",
+                "es": "En pausa"
               }
             },
             {
               "value": "suspended",
               "label": {
                 "en": "Suspended",
-                "fr": "Suspendue (suspended)"
+                "fr": "Suspendue (suspended)",
+                "de": "Suspendiert",
+                "es": "Suspendida"
               }
             }
           ]
@@ -775,7 +999,9 @@
           "type": "string",
           "label": {
             "en": "Name",
-            "fr": "Nom"
+            "fr": "Nom",
+            "de": "Name",
+            "es": "Nombre"
           }
         },
         {
@@ -783,7 +1009,9 @@
           "type": "number",
           "label": {
             "en": "VMID",
-            "fr": "VMID"
+            "fr": "VMID",
+            "de": "VMID",
+            "es": "VMID"
           }
         },
         {
@@ -791,7 +1019,9 @@
           "type": "string",
           "label": {
             "en": "Kind (qemu / lxc)",
-            "fr": "Type (qemu / lxc)"
+            "fr": "Type (qemu / lxc)",
+            "de": "Art (qemu / lxc)",
+            "es": "Tipo (qemu / lxc)"
           }
         },
         {
@@ -799,7 +1029,9 @@
           "type": "string",
           "label": {
             "en": "Node",
-            "fr": "Nœud"
+            "fr": "Nœud",
+            "de": "Knoten",
+            "es": "Nodo"
           }
         },
         {
@@ -807,7 +1039,9 @@
           "type": "string",
           "label": {
             "en": "Proxmox server",
-            "fr": "Serveur Proxmox"
+            "fr": "Serveur Proxmox",
+            "de": "Proxmox-Server",
+            "es": "Servidor Proxmox"
           }
         },
         {
@@ -815,7 +1049,9 @@
           "type": "string",
           "label": {
             "en": "New state",
-            "fr": "Nouvel état"
+            "fr": "Nouvel état",
+            "de": "Neuer Zustand",
+            "es": "Nuevo estado"
           }
         },
         {
@@ -823,7 +1059,9 @@
           "type": "string",
           "label": {
             "en": "Previous state",
-            "fr": "État précédent"
+            "fr": "État précédent",
+            "de": "Vorheriger Zustand",
+            "es": "Estado anterior"
           }
         }
       ]
@@ -832,11 +1070,15 @@
       "key": "disk_failed",
       "label": {
         "en": "Proxmox disk failing (SMART)",
-        "fr": "Disque Proxmox en panne (SMART)"
+        "fr": "Disque Proxmox en panne (SMART)",
+        "de": "Proxmox-Festplatte fehlerhaft (SMART)",
+        "es": "Disco Proxmox con fallo (SMART)"
       },
       "description": {
         "en": "The SMART verdict of a disk of a node turned to failed.",
-        "fr": "Le verdict SMART d'un disque d'un nœud est passé en échec."
+        "fr": "Le verdict SMART d'un disque d'un nœud est passé en échec.",
+        "de": "Der SMART-Befund einer Festplatte eines Knotens ist auf „fehlerhaft“ umgeschlagen.",
+        "es": "El veredicto SMART de un disco de un nodo ha pasado a fallido."
       },
       "fields": [
         {
@@ -845,11 +1087,15 @@
           "source": "devices",
           "label": {
             "en": "Proxmox node",
-            "fr": "Nœud Proxmox"
+            "fr": "Nœud Proxmox",
+            "de": "Proxmox-Knoten",
+            "es": "Nodo Proxmox"
           },
           "description": {
             "en": "Leave empty for any node.",
-            "fr": "Laissez vide pour n'importe quel nœud."
+            "fr": "Laissez vide pour n'importe quel nœud.",
+            "de": "Leer lassen für jeden Knoten.",
+            "es": "Déjelo vacío para cualquier nodo."
           },
           "required": false
         }
@@ -860,7 +1106,9 @@
           "type": "string",
           "label": {
             "en": "Node",
-            "fr": "Nœud"
+            "fr": "Nœud",
+            "de": "Knoten",
+            "es": "Nodo"
           }
         },
         {
@@ -868,7 +1116,9 @@
           "type": "string",
           "label": {
             "en": "Proxmox server",
-            "fr": "Serveur Proxmox"
+            "fr": "Serveur Proxmox",
+            "de": "Proxmox-Server",
+            "es": "Servidor Proxmox"
           }
         },
         {
@@ -876,7 +1126,9 @@
           "type": "string",
           "label": {
             "en": "Disk",
-            "fr": "Disque"
+            "fr": "Disque",
+            "de": "Festplatte",
+            "es": "Disco"
           }
         },
         {
@@ -884,7 +1136,9 @@
           "type": "string",
           "label": {
             "en": "Disk model",
-            "fr": "Modèle du disque"
+            "fr": "Modèle du disque",
+            "de": "Festplattenmodell",
+            "es": "Modelo del disco"
           }
         },
         {
@@ -892,7 +1146,9 @@
           "type": "string",
           "label": {
             "en": "SMART verdict",
-            "fr": "Verdict SMART"
+            "fr": "Verdict SMART",
+            "de": "SMART-Befund",
+            "es": "Veredicto SMART"
           }
         }
       ]
@@ -903,11 +1159,15 @@
       "key": "refresh",
       "label": {
         "en": "Refresh Proxmox",
-        "fr": "Rafraîchir Proxmox"
+        "fr": "Rafraîchir Proxmox",
+        "de": "Proxmox aktualisieren",
+        "es": "Actualizar Proxmox"
       },
       "description": {
         "en": "Reads every node and VM/LXC now, and counts the results.",
-        "fr": "Lit tous les nœuds et VM/LXC maintenant, et compte les résultats."
+        "fr": "Lit tous les nœuds et VM/LXC maintenant, et compte les résultats.",
+        "de": "Liest jetzt alle Knoten und VMs/LXC und zählt die Ergebnisse.",
+        "es": "Lee ahora todos los nodos y VM/LXC y cuenta los resultados."
       },
       "timeout_seconds": 90,
       "outputs": [
@@ -916,7 +1176,9 @@
           "type": "number",
           "label": {
             "en": "Nodes with a successful backup",
-            "fr": "Nœuds avec une sauvegarde réussie"
+            "fr": "Nœuds avec une sauvegarde réussie",
+            "de": "Knoten mit erfolgreichem Backup",
+            "es": "Nodos con copia de seguridad correcta"
           }
         },
         {
@@ -924,7 +1186,9 @@
           "type": "number",
           "label": {
             "en": "Nodes with a failed backup",
-            "fr": "Nœuds avec une sauvegarde en échec"
+            "fr": "Nœuds avec une sauvegarde en échec",
+            "de": "Knoten mit fehlgeschlagenem Backup",
+            "es": "Nodos con copia de seguridad fallida"
           }
         },
         {
@@ -932,7 +1196,9 @@
           "type": "number",
           "label": {
             "en": "Nodes with no backup",
-            "fr": "Nœuds sans sauvegarde"
+            "fr": "Nœuds sans sauvegarde",
+            "de": "Knoten ohne Backup",
+            "es": "Nodos sin copia de seguridad"
           }
         },
         {
@@ -940,7 +1206,9 @@
           "type": "number",
           "label": {
             "en": "VM/LXC running",
-            "fr": "VM/LXC en marche"
+            "fr": "VM/LXC en marche",
+            "de": "Laufende VMs/LXC",
+            "es": "VM/LXC en ejecución"
           }
         },
         {
@@ -948,7 +1216,9 @@
           "type": "number",
           "label": {
             "en": "VM/LXC not running",
-            "fr": "VM/LXC arrêtées"
+            "fr": "VM/LXC arrêtées",
+            "de": "Nicht laufende VMs/LXC",
+            "es": "VM/LXC que no están en ejecución"
           }
         },
         {
@@ -956,7 +1226,9 @@
           "type": "number",
           "label": {
             "en": "Devices that could not be read",
-            "fr": "Appareils illisibles"
+            "fr": "Appareils illisibles",
+            "de": "Geräte, die nicht gelesen werden konnten",
+            "es": "Dispositivos que no se pudieron leer"
           }
         }
       ]
@@ -965,11 +1237,15 @@
       "key": "get_backup_status",
       "label": {
         "en": "Get the last Proxmox backup",
-        "fr": "Lire la dernière sauvegarde Proxmox"
+        "fr": "Lire la dernière sauvegarde Proxmox",
+        "de": "Letztes Proxmox-Backup abrufen",
+        "es": "Obtener la última copia de seguridad de Proxmox"
       },
       "description": {
         "en": "The last backup of one node, for the next actions of the scene.",
-        "fr": "La dernière sauvegarde d'un nœud, pour les actions suivantes de la scène."
+        "fr": "La dernière sauvegarde d'un nœud, pour les actions suivantes de la scène.",
+        "de": "Das letzte Backup eines Knotens, für die nächsten Aktionen der Szene.",
+        "es": "La última copia de seguridad de un nodo, para las siguientes acciones de la escena."
       },
       "timeout_seconds": 60,
       "fields": [
@@ -979,11 +1255,15 @@
           "source": "devices",
           "label": {
             "en": "Proxmox node",
-            "fr": "Nœud Proxmox"
+            "fr": "Nœud Proxmox",
+            "de": "Proxmox-Knoten",
+            "es": "Nodo Proxmox"
           },
           "description": {
             "en": "The node to read.",
-            "fr": "Le nœud à lire."
+            "fr": "Le nœud à lire.",
+            "de": "Der zu lesende Knoten.",
+            "es": "El nodo que se va a leer."
           },
           "required": true
         }
@@ -994,7 +1274,9 @@
           "type": "string",
           "label": {
             "en": "Node",
-            "fr": "Nœud"
+            "fr": "Nœud",
+            "de": "Knoten",
+            "es": "Nodo"
           }
         },
         {
@@ -1002,7 +1284,9 @@
           "type": "boolean",
           "label": {
             "en": "A backup was found",
-            "fr": "Une sauvegarde a été trouvée"
+            "fr": "Une sauvegarde a été trouvée",
+            "de": "Ein Backup wurde gefunden",
+            "es": "Se encontró una copia de seguridad"
           }
         },
         {
@@ -1010,7 +1294,9 @@
           "type": "boolean",
           "label": {
             "en": "Backup succeeded",
-            "fr": "Sauvegarde réussie"
+            "fr": "Sauvegarde réussie",
+            "de": "Backup erfolgreich",
+            "es": "Copia de seguridad correcta"
           }
         },
         {
@@ -1018,7 +1304,9 @@
           "type": "string",
           "label": {
             "en": "Backup status",
-            "fr": "Statut de la sauvegarde"
+            "fr": "Statut de la sauvegarde",
+            "de": "Backup-Status",
+            "es": "Estado de la copia de seguridad"
           }
         },
         {
@@ -1026,7 +1314,9 @@
           "type": "string",
           "label": {
             "en": "Last backup",
-            "fr": "Dernière sauvegarde"
+            "fr": "Dernière sauvegarde",
+            "de": "Letztes Backup",
+            "es": "Última copia de seguridad"
           }
         },
         {
@@ -1034,7 +1324,9 @@
           "type": "number",
           "label": {
             "en": "Duration (s)",
-            "fr": "Durée (s)"
+            "fr": "Durée (s)",
+            "de": "Dauer (s)",
+            "es": "Duración (s)"
           }
         }
       ]
@@ -1043,11 +1335,15 @@
       "key": "get_smart_status",
       "label": {
         "en": "Get the SMART status of a Proxmox node",
-        "fr": "Lire l'état SMART d'un nœud Proxmox"
+        "fr": "Lire l'état SMART d'un nœud Proxmox",
+        "de": "SMART-Status eines Proxmox-Knotens abrufen",
+        "es": "Obtener el estado SMART de un nodo Proxmox"
       },
       "description": {
         "en": "The health of the disks of one node, for the next actions of the scene.",
-        "fr": "La santé des disques d'un nœud, pour les actions suivantes de la scène."
+        "fr": "La santé des disques d'un nœud, pour les actions suivantes de la scène.",
+        "de": "Der Zustand der Festplatten eines Knotens, für die nächsten Aktionen der Szene.",
+        "es": "El estado de los discos de un nodo, para las siguientes acciones de la escena."
       },
       "timeout_seconds": 60,
       "fields": [
@@ -1057,11 +1353,15 @@
           "source": "devices",
           "label": {
             "en": "Proxmox node",
-            "fr": "Nœud Proxmox"
+            "fr": "Nœud Proxmox",
+            "de": "Proxmox-Knoten",
+            "es": "Nodo Proxmox"
           },
           "description": {
             "en": "The node to read.",
-            "fr": "Le nœud à lire."
+            "fr": "Le nœud à lire.",
+            "de": "Der zu lesende Knoten.",
+            "es": "El nodo que se va a leer."
           },
           "required": true
         }
@@ -1072,7 +1372,9 @@
           "type": "string",
           "label": {
             "en": "Node",
-            "fr": "Nœud"
+            "fr": "Nœud",
+            "de": "Knoten",
+            "es": "Nodo"
           }
         },
         {
@@ -1080,7 +1382,9 @@
           "type": "string",
           "label": {
             "en": "SMART status",
-            "fr": "État SMART"
+            "fr": "État SMART",
+            "de": "SMART-Status",
+            "es": "Estado SMART"
           }
         },
         {
@@ -1088,7 +1392,9 @@
           "type": "number",
           "label": {
             "en": "Disks read",
-            "fr": "Disques lus"
+            "fr": "Disques lus",
+            "de": "Gelesene Festplatten",
+            "es": "Discos leídos"
           }
         },
         {
@@ -1096,7 +1402,9 @@
           "type": "number",
           "label": {
             "en": "Failed disks",
-            "fr": "Disques en échec"
+            "fr": "Disques en échec",
+            "de": "Fehlerhafte Festplatten",
+            "es": "Discos con fallo"
           }
         },
         {
@@ -1104,7 +1412,9 @@
           "type": "number",
           "label": {
             "en": "Disks with no verdict",
-            "fr": "Disques sans verdict"
+            "fr": "Disques sans verdict",
+            "de": "Festplatten ohne Befund",
+            "es": "Discos sin veredicto"
           }
         },
         {
@@ -1112,7 +1422,9 @@
           "type": "number",
           "label": {
             "en": "Hottest disk (°C)",
-            "fr": "Disque le plus chaud (°C)"
+            "fr": "Disque le plus chaud (°C)",
+            "de": "Heißeste Festplatte (°C)",
+            "es": "Disco más caliente (°C)"
           }
         }
       ]
@@ -1121,11 +1433,15 @@
       "key": "get_guest_status",
       "label": {
         "en": "Get a Proxmox VM/LXC state",
-        "fr": "Lire l'état d'une VM/LXC Proxmox"
+        "fr": "Lire l'état d'une VM/LXC Proxmox",
+        "de": "Zustand einer Proxmox-VM/LXC abrufen",
+        "es": "Obtener el estado de una VM/LXC de Proxmox"
       },
       "description": {
         "en": "The state of one VM or LXC, for the next actions of the scene.",
-        "fr": "L'état d'une VM ou d'un LXC, pour les actions suivantes de la scène."
+        "fr": "L'état d'une VM ou d'un LXC, pour les actions suivantes de la scène.",
+        "de": "Der Zustand einer VM oder eines LXC, für die nächsten Aktionen der Szene.",
+        "es": "El estado de una VM o un LXC, para las siguientes acciones de la escena."
       },
       "timeout_seconds": 30,
       "fields": [
@@ -1135,11 +1451,15 @@
           "source": "devices",
           "label": {
             "en": "VM or LXC",
-            "fr": "VM ou LXC"
+            "fr": "VM ou LXC",
+            "de": "VM oder LXC",
+            "es": "VM o LXC"
           },
           "description": {
             "en": "The VM/LXC to read.",
-            "fr": "La VM/LXC à lire."
+            "fr": "La VM/LXC à lire.",
+            "de": "Die zu lesende VM/LXC.",
+            "es": "La VM/LXC que se va a leer."
           },
           "required": true
         }
@@ -1150,7 +1470,9 @@
           "type": "string",
           "label": {
             "en": "State",
-            "fr": "État"
+            "fr": "État",
+            "de": "Zustand",
+            "es": "Estado"
           }
         },
         {
@@ -1158,7 +1480,9 @@
           "type": "boolean",
           "label": {
             "en": "Running",
-            "fr": "En marche"
+            "fr": "En marche",
+            "de": "Läuft",
+            "es": "En ejecución"
           }
         },
         {
@@ -1166,7 +1490,9 @@
           "type": "string",
           "label": {
             "en": "Name",
-            "fr": "Nom"
+            "fr": "Nom",
+            "de": "Name",
+            "es": "Nombre"
           }
         },
         {
@@ -1174,7 +1500,9 @@
           "type": "string",
           "label": {
             "en": "Node",
-            "fr": "Nœud"
+            "fr": "Nœud",
+            "de": "Knoten",
+            "es": "Nodo"
           }
         }
       ]
