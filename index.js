@@ -43,8 +43,9 @@ let config = normalizeConfig();
 
 // --- The integration's own refresh loop --------------------------------------
 // Gladys only polls a device whose row carries `should_poll: true`, a flag it
-// reads once, when the device is created: every node and guest added before
-// the flag was published would never be read again. This loop walks the
+// reads once, when the device is created (5.3+ sets it from `poll_frequency`,
+// older cores did not): every node and guest added before the flag was
+// published would never be read again. This loop walks the
 // created devices every minute through the same `pollDevice()` as `onPoll`,
 // whose `claimPoll()` throttle keeps a device Gladys also polls at one read
 // per configured interval.

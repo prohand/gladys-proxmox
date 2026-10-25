@@ -174,9 +174,10 @@ export function buildNodeDevice(gladys, server, node, disks = []) {
     // slowest being one minute: the configured interval is enforced by
     // `claimPoll()` instead. See `src/poll.js`.
     poll_frequency: devicePollFrequency(server.poll_frequency),
-    // Gladys only schedules a device that also asks for it (`should_poll` is
-    // false by default in the core); without it onPoll was never called. The
-    // flag is read at creation only: index.js covers older devices.
+    // Gladys >= 5.3 sets `should_poll` itself when `poll_frequency` is there;
+    // older cores defaulted it to false and never called onPoll without it.
+    // Kept explicit: the flag is read at creation only, and index.js covers
+    // the devices created before it was published.
     should_poll: true,
     features,
   };

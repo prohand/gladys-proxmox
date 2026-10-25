@@ -6,6 +6,16 @@ All notable changes to this integration are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Store catalog: the integration now also sits on the new "servers" shelf, and declares search
+  keywords (hypervisor, virtualization, vzdump, QEMU, KVM, SMART…).
+
+### Changed
+
+- Gladys 5.3.0 or later is now required (store keywords).
+- SDK `@gladysassistant/integration-sdk` 0.16.
+
 ## [2.4.1] - 2026-10-23
 
 - Maintenance release, no functional change.
