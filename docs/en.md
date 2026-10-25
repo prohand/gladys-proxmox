@@ -9,6 +9,8 @@ This integration is **strictly read-only**. It performs `GET` requests on the
 Proxmox VE API and nothing else — it never starts, stops, migrates, deletes or
 reconfigures anything.
 
+Requires **Gladys 5.3.0** or later.
+
 ## What you get
 
 After installation, one Gladys device appears per Proxmox node, named

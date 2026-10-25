@@ -50,7 +50,7 @@ test('a node device carries the read-only backup and SMART features', () => {
   // in milliseconds, and rejects the whole publish otherwise.
   assert.equal(device.poll_frequency, 60000);
   assert.ok(GLADYS_POLL_FREQUENCIES.includes(device.poll_frequency));
-  // Without should_poll the core never schedules the device.
+  // Cores older than 5.3 never schedule a device without should_poll.
   assert.equal(device.should_poll, true);
   // The three backup features, plus the SMART status — no disk was discovered
   // here, so there is no temperature feature to go with it.

@@ -9,6 +9,8 @@ Diese Integration ist **strikt schreibgeschützt**. Sie führt `GET`-Anfragen an
 die Proxmox-VE-API aus und sonst nichts — sie startet, stoppt, migriert, löscht
 oder konfiguriert niemals etwas.
 
+Erfordert **Gladys 5.3.0** oder neuer.
+
 ## Was du bekommst
 
 Nach der Installation erscheint pro Proxmox-Knoten ein Gladys-Gerät mit dem

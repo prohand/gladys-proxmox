@@ -250,6 +250,57 @@ test('widgets and scene declarations require Gladys >= 5.1.0', () => {
   assert.ok(major > 5 || (major === 5 && minor >= 1), manifest.gladys_version);
 });
 
+// The store's catalog shelves, with the four added in 2026-10. An unknown key
+// is only dropped with a warning: a typo would silently cost a shelf.
+const CATALOG_CATEGORIES = [
+  'climate',
+  'lighting',
+  'energy',
+  'security',
+  'multimedia',
+  'appliances',
+  'environment',
+  'protocols',
+  'network',
+  'notifications',
+  'assistants',
+  'services',
+  'transport',
+  'vehicles',
+  'servers',
+  'leisure',
+];
+
+test('categories are 1 to 3 unique keys of the store vocabulary, servers first', () => {
+  assert.ok(manifest.categories.length >= 1 && manifest.categories.length <= 3);
+  assert.equal(new Set(manifest.categories).size, manifest.categories.length);
+  for (const category of manifest.categories) {
+    assert.ok(CATALOG_CATEGORIES.includes(category), `unknown category "${category}"`);
+  }
+  assert.equal(manifest.categories[0], 'servers');
+});
+
+test('keywords are 1 to 10 unique search terms of 2 to 30 characters', () => {
+  assert.ok(Array.isArray(manifest.keywords));
+  assert.ok(manifest.keywords.length >= 1 && manifest.keywords.length <= 10);
+  const normalized = manifest.keywords.map((keyword) => keyword.trim().toLowerCase());
+  assert.equal(new Set(normalized).size, normalized.length, 'keywords must be unique');
+  for (const keyword of normalized) {
+    assert.ok(keyword.length >= 2 && keyword.length <= 30, `keyword "${keyword}"`);
+  }
+});
+
+test('Proxmox runs worldwide: no countries restriction', () => {
+  assert.equal(manifest.countries, undefined);
+});
+
+test('keywords, countries and music require Gladys >= 5.3.0', () => {
+  const declared = ['keywords', 'countries', 'music'].filter((f) => manifest[f] !== undefined);
+  assert.ok(declared.length > 0);
+  const [major, minor] = minimumGladysVersion();
+  assert.ok(major > 5 || (major === 5 && minor >= 3), manifest.gladys_version);
+});
+
 test('the declared capability keys are the ones the code uses', () => {
   // A key is stored by the dashboards and the scenes: it must never drift.
   const keys = (list) => (list ?? []).map((entry) => entry.key).sort();

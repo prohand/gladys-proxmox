@@ -9,6 +9,8 @@ Cette intégration est **strictement en lecture seule**. Elle n'effectue que des
 requêtes `GET` sur l'API Proxmox VE — elle ne démarre, n'arrête, ne migre, ne
 supprime et ne reconfigure jamais quoi que ce soit.
 
+Nécessite **Gladys 5.3.0** ou plus récent.
+
 ## Ce que vous obtenez
 
 Après l'installation, un appareil Gladys apparaît par nœud Proxmox, nommé

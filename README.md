@@ -18,6 +18,8 @@ Up to **two Proxmox servers** can be monitored at once: the configuration form
 carries two identical blocks, each with its own host, API token, TLS posture
 and node filter.
 
+Requires Gladys 5.3.0 or later (manifest `gladys_version: ">=5.3.0"`).
+
 ## What it publishes
 
 **One Gladys device per Proxmox node** (`Proxmox <node>`), with three

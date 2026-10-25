@@ -124,9 +124,11 @@ it.
   interval is in seconds and goes up to an hour, so `src/poll.js` declares the
   slowest accepted value and enforces the real interval itself (`claimPoll()`);
   an early poll publishes nothing rather than a stale re-read. Devices also carry
-  `should_poll: true`: without it the core never schedules them, and it reads the
-  flag only at creation, so `index.js` runs its own one-minute loop over
-  `gladys.devices` through the same throttled `pollDevice()`.
+  `should_poll: true`: Gladys 5.3+ sets it by itself from `poll_frequency`, but
+  older cores never scheduled a device without it, and the core reads the flag
+  only at creation, so `index.js` runs its own one-minute loop over
+  `gladys.devices` through the same throttled `pollDevice()` for the devices
+  created before it was published.
 - **Guest ids are `<kind>-<vmid>`**, never node-based: the VMID is cluster-wide
   and survives a migration.
 - **The first server's external ids stay unscoped.** `scopeId()` prefixes only
@@ -155,7 +157,8 @@ it.
 - **Capability keys are forever.** Widget, scene trigger and scene action keys
   (`src/capabilities.js`) are stored by dashboards and scenes: never rename or
   remove one, and never add a `required` scene-action field without a
-  `default`. Declaring any of them needs `gladys_version >= 5.1.0`. Scene
+  `default`. Declaring any of them needs `gladys_version >= 5.1.0`; the
+  manifest `keywords` need `>= 5.3.0`, the floor declared today. Scene
   actions stay read-only like the rest.
 - **Widget contents must pass `validateWidgetContent()` with no issue** (tests
   assert `[]`): texts are cut with `clip()` to the vocabulary bounds, at most 8
