@@ -6,6 +6,10 @@ All notable changes to this integration are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.5.5] - 2026-11-16
+
+- Maintenance release, no functional change.
+
 ## [2.5.4] - 2026-11-16
 
 - Maintenance release, no functional change.
@@ -150,7 +154,8 @@ First public release.
 - Publish a poll frequency Gladys accepts, and hold the real interval
 - Declare min/max on every feature, and report statuses as text
 
-[Unreleased]: https://github.com/prohand/gladys-proxmox/compare/v2.5.4...HEAD
+[Unreleased]: https://github.com/prohand/gladys-proxmox/compare/v2.5.5...HEAD
+[2.5.5]: https://github.com/prohand/gladys-proxmox/compare/v2.5.4...v2.5.5
 [2.5.4]: https://github.com/prohand/gladys-proxmox/compare/v2.5.3...v2.5.4
 [2.5.3]: https://github.com/prohand/gladys-proxmox/compare/v2.5.2...v2.5.3
 [2.5.2]: https://github.com/prohand/gladys-proxmox/compare/v2.5.1...v2.5.2
